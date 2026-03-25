@@ -4,11 +4,11 @@
  * @typeParam T - Configuration shape for the widget
  */
 export interface Widget<T> {
-  /** Parsed configuration object (may be partial or empty if parsing fails). */
-  config: Partial<T>;
+    /** Parsed configuration object (may be partial or empty if parsing fails). */
+    config: Partial<T>;
 
-  /** The full matched string from the source (including comment syntax). */
-  matched: string;
+    /** The full matched string from the source (including comment syntax). */
+    matched: string;
 }
 
 /**
@@ -48,30 +48,27 @@ export interface Widget<T> {
  * console.log(widgets?.[0].config.rows); // 5
  * ```
  */
-export function widgets<T>(
-  name: string,
-  source: string
-): Widget<T>[] | undefined {
-  const comment = `<!--\\s*${name}(?::({.*}))?\\s*-->`;
-  const regex = new RegExp(comment, "g");
-  const widgets: Widget<T>[] = [];
+export function widgets<T>(name: string, source: string): Widget<T>[] | undefined {
+    const comment = `<!--\\s*${name}(?::({.*}))?\\s*-->`;
+    const regex = new RegExp(comment, 'g');
+    const widgets: Widget<T>[] = [];
 
-  let res: RegExpExecArray | null;
-  while ((res = regex.exec(source)) !== null) {
-    const widget: Widget<T> = {
-      matched: res[0],
-      config: {}
-    };
+    let res: RegExpExecArray | null;
+    while ((res = regex.exec(source)) !== null) {
+        const widget: Widget<T> = {
+            matched: res[0],
+            config: {}
+        };
 
-    try {
-      if (res[1]) widget.config = JSON.parse(res[1]) as T;
-    } catch (error) {
-      // Silently ignore invalid JSON configs
+        try {
+            if (res[1]) widget.config = JSON.parse(res[1]) as T;
+        } catch (error) {
+            // Silently ignore invalid JSON configs
+        }
+
+        widgets.push(widget);
     }
 
-    widgets.push(widget);
-  }
-
-  if (widgets.length === 0) return undefined;
-  return widgets;
+    if (widgets.length === 0) return undefined;
+    return widgets;
 }

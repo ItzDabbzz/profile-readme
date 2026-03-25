@@ -1,4 +1,4 @@
-import { Widget } from "../widget";
+import { Widget } from '../widget';
 
 /* =========================
    CONFIG (INPUT = OPTIONAL)
@@ -12,7 +12,7 @@ export interface WakaTimeConfig {
     apiKey?: string;
 
     /** Time range for stats. */
-    range?: "last_7_days" | "last_30_days" | "last_6_months" | "last_year";
+    range?: 'last_7_days' | 'last_30_days' | 'last_6_months' | 'last_year';
 
     /** Toggle visibility of sections. */
     showLanguages?: boolean;
@@ -33,7 +33,7 @@ export interface WakaTimeConfig {
     showPercent?: boolean;
 
     /** Output style for sections. */
-    style?: "table" | "list" | "compact";
+    style?: 'table' | 'list' | 'compact';
 
     /** Show summary badges at the top. */
     showSummary?: boolean;
@@ -51,7 +51,7 @@ export interface WakaTimeConfig {
  */
 type ResolvedConfig = {
     apiKey: string;
-    range: "last_7_days" | "last_30_days" | "last_6_months" | "last_year";
+    range: 'last_7_days' | 'last_30_days' | 'last_6_months' | 'last_year';
 
     showLanguages: boolean;
     showEditors: boolean;
@@ -64,7 +64,7 @@ type ResolvedConfig = {
     showTime: boolean;
     showPercent: boolean;
 
-    style: "table" | "list" | "compact";
+    style: 'table' | 'list' | 'compact';
 
     showSummary: boolean;
     showHighlights: boolean;
@@ -84,11 +84,11 @@ type ResolvedConfig = {
  * @returns Fully resolved configuration
  */
 function resolveConfig(input: WakaTimeConfig): ResolvedConfig {
-    const apiKey = input.apiKey ?? process.env.INPUT_WAKATIME_KEY ?? "";
+    const apiKey = input.apiKey ?? process.env.INPUT_WAKATIME_KEY ?? '';
 
     return {
         apiKey,
-        range: input.range ?? "last_7_days",
+        range: input.range ?? 'last_7_days',
 
         showLanguages: input.showLanguages ?? true,
         showEditors: input.showEditors ?? true,
@@ -101,10 +101,10 @@ function resolveConfig(input: WakaTimeConfig): ResolvedConfig {
         showTime: input.showTime ?? true,
         showPercent: input.showPercent ?? true,
 
-        style: input.style ?? "table",
+        style: input.style ?? 'table',
 
         showSummary: input.showSummary ?? true,
-        showHighlights: input.showHighlights ?? true,
+        showHighlights: input.showHighlights ?? true
     };
 }
 
@@ -113,22 +113,22 @@ function resolveConfig(input: WakaTimeConfig): ResolvedConfig {
 ========================= */
 
 /** Human-readable labels for each time range. */
-const RANGE_LABEL: Record<ResolvedConfig["range"], string> = {
-    last_7_days: "Last 7 Days",
-    last_30_days: "Last 30 Days",
-    last_6_months: "Last 6 Months",
-    last_year: "Last Year",
+const RANGE_LABEL: Record<ResolvedConfig['range'], string> = {
+    last_7_days: 'Last 7 Days',
+    last_30_days: 'Last 30 Days',
+    last_6_months: 'Last 6 Months',
+    last_year: 'Last Year'
 };
 
 /**
  * Optional color mapping for known languages (used in badges).
  */
 const LANGUAGE_COLOR: Record<string, string> = {
-    TypeScript: "3178c6",
-    JavaScript: "f7df1e",
-    Python: "3572A5",
-    Rust: "dea584",
-    Go: "00ADD8",
+    TypeScript: '3178c6',
+    JavaScript: 'f7df1e',
+    Python: '3572A5',
+    Rust: 'dea584',
+    Go: '00ADD8'
 };
 
 /* =========================
@@ -158,7 +158,7 @@ function formatTime(seconds: number): string {
  */
 function progressBar(percent: number, width = 20): string {
     const filled = Math.round((percent / 100) * width);
-    return "█".repeat(filled) + "░".repeat(width - filled);
+    return '█'.repeat(filled) + '░'.repeat(width - filled);
 }
 
 /**
@@ -168,7 +168,7 @@ function progressBar(percent: number, width = 20): string {
  * @param value - Badge value
  * @param color - Badge color (hex without #)
  */
-function badge(label: string, value: string, color = "58a6ff") {
+function badge(label: string, value: string, color = '58a6ff') {
     return `![${label}](https://img.shields.io/badge/${encodeURIComponent(label)}-${encodeURIComponent(value)}-${color}?style=flat-square)`;
 }
 
@@ -207,29 +207,27 @@ interface StatItem {
  * @param config - Resolved widget configuration
  * @returns Markdown string for the section
  */
-function renderSection(
-    title: string,
-    items: StatItem[],
-    config: ResolvedConfig
-): string {
+function renderSection(title: string, items: StatItem[], config: ResolvedConfig): string {
     const header = `### ${title}`;
 
-    if (config.style === "compact") {
+    if (config.style === 'compact') {
         return [
             header,
-            ...items.map(i =>
-                `\`${i.name}\` ${config.showTime ? formatTime(i.total_seconds) : ""} \`${progressBar(i.percent, 10)}\` ${config.showPercent ? i.percent.toFixed(1) + "%" : ""}`
-            ),
-        ].join("\n");
+            ...items.map(
+                i =>
+                    `\`${i.name}\` ${config.showTime ? formatTime(i.total_seconds) : ''} \`${progressBar(i.percent, 10)}\` ${config.showPercent ? i.percent.toFixed(1) + '%' : ''}`
+            )
+        ].join('\n');
     }
 
-    if (config.style === "list") {
+    if (config.style === 'list') {
         return [
             header,
-            ...items.map(i =>
-                `- **${i.name}** ${config.showTime ? `(${formatTime(i.total_seconds)})` : ""} \`${progressBar(i.percent)}\` ${config.showPercent ? i.percent.toFixed(1) + "%" : ""}`
-            ),
-        ].join("\n");
+            ...items.map(
+                i =>
+                    `- **${i.name}** ${config.showTime ? `(${formatTime(i.total_seconds)})` : ''} \`${progressBar(i.percent)}\` ${config.showPercent ? i.percent.toFixed(1) + '%' : ''}`
+            )
+        ].join('\n');
     }
 
     // TABLE
@@ -239,11 +237,9 @@ function renderSection(
 `;
 
     for (const i of items) {
-        const name = config.showBadges
-            ? badge(i.name, "", LANGUAGE_COLOR[i.name] ?? "58a6ff")
-            : `\`${i.name}\``;
+        const name = config.showBadges ? badge(i.name, '', LANGUAGE_COLOR[i.name] ?? '58a6ff') : `\`${i.name}\``;
 
-        out += `| ${name} | ${config.showTime ? formatTime(i.total_seconds) : ""} | \`${progressBar(i.percent)}\` ${config.showPercent ? i.percent.toFixed(1) + "%" : ""} |\n`;
+        out += `| ${name} | ${config.showTime ? formatTime(i.total_seconds) : ''} | \`${progressBar(i.percent)}\` ${config.showPercent ? i.percent.toFixed(1) + '%' : ''} |\n`;
     }
 
     return out;
@@ -282,14 +278,11 @@ export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> 
         return `⚠️ Missing WakaTime API key`;
     }
 
-    const encoded = Buffer.from(config.apiKey).toString("base64");
+    const encoded = Buffer.from(config.apiKey).toString('base64');
 
-    const res = await fetch(
-        `https://wakatime.com/api/v1/users/current/stats/${config.range}`,
-        {
-            headers: { Authorization: `Basic ${encoded}` },
-        }
-    );
+    const res = await fetch(`https://wakatime.com/api/v1/users/current/stats/${config.range}`, {
+        headers: { Authorization: `Basic ${encoded}` }
+    });
 
     if (!res.ok) {
         return `❌ API Error ${res.status}`;
@@ -309,45 +302,35 @@ export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> 
     if (config.showSummary) {
         sections.push(
             [
-                badge("Total", data.human_readable_total),
-                badge("Languages", String(data.languages?.length ?? 0)),
-                badge("Editors", String(data.editors?.length ?? 0)),
-            ].join(" ")
+                badge('Total', data.human_readable_total),
+                badge('Languages', String(data.languages?.length ?? 0)),
+                badge('Editors', String(data.editors?.length ?? 0))
+            ].join(' ')
         );
     }
 
     /* HIGHLIGHTS */
     if (config.showHighlights && data.languages?.length) {
         const top = data.languages[0];
-        sections.push(
-            `## 🏆 Highlights\n- Top Language: **${top.name}** (${top.percent.toFixed(1)}%)`
-        );
+        sections.push(`## 🏆 Highlights\n- Top Language: **${top.name}** (${top.percent.toFixed(1)}%)`);
     }
 
     /* SECTIONS */
     if (config.showLanguages && data.languages?.length) {
-        sections.push(
-            renderSection("💬 Languages", data.languages.slice(0, config.rows), config)
-        );
+        sections.push(renderSection('💬 Languages', data.languages.slice(0, config.rows), config));
     }
 
     if (config.showEditors && data.editors?.length) {
-        sections.push(
-            renderSection("🔥 Editors", data.editors.slice(0, config.rows), config)
-        );
+        sections.push(renderSection('🔥 Editors', data.editors.slice(0, config.rows), config));
     }
 
     if (config.showOS && data.operating_systems?.length) {
-        sections.push(
-            renderSection("🖥 OS", data.operating_systems.slice(0, config.rows), config)
-        );
+        sections.push(renderSection('🖥 OS', data.operating_systems.slice(0, config.rows), config));
     }
 
     if (config.showProjects && data.projects?.length) {
-        sections.push(
-            renderSection("📁 Projects", data.projects.slice(0, config.rows), config)
-        );
+        sections.push(renderSection('📁 Projects', data.projects.slice(0, config.rows), config));
     }
 
-    return sections.join("\n\n");
+    return sections.join('\n\n');
 }

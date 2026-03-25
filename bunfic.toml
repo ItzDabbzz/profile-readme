@@ -1,0 +1,17 @@
+# Bun test configuration
+# https://bun.sh/docs/runtime/bunfig
+
+[test]
+# Glob patterns for test files
+include = ["tests/**/*.test.ts"]
+
+# Timeout per individual test (ms)
+timeout = 10000
+
+# Re-run failing tests up to this many times before reporting failure
+bail = 0
+
+# Print coverage report (run with: bun test --coverage)
+coverage = true
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
