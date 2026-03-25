@@ -2,26 +2,50 @@ import * as core from "@actions/core";
 import * as github from "@actions/github";
 import * as fs from "fs";
 import { widgets } from "./widget";
-import { activity } from "./widgets/activity";
-import { timestamp } from "./widgets/timestamp";
-import { repos } from "./widgets/repos";
-import { feed } from "./widgets/feed";
+import { activity, ActivityConfig } from "./widgets/activity";
+import { timestamp, TimestampConfig } from "./widgets/timestamp";
+import { repos, ReposConfig } from "./widgets/repos";
+import { feed, FeedConfig } from "./widgets/feed";
+import { wakatime, WakaTimeConfig } from "./widgets/wakatime";
 
+/**
+ * Main workflow runner for updating markdown templates with widgets.
+ *
+ * This script reads a template file, searches for widget placeholders,
+ * fetches relevant data (GitHub events, repos, WakaTime stats, RSS feeds),
+ * and replaces widget placeholders with generated content. Finally, it writes
+ * the output to the target README file.
+ *
+ * @remarks
+ * Widgets are identified in the template using HTML comment syntax:
+ * ```
+ * <!-- WIDGET_NAME:{ "configKey": "value" } -->
+ * ```
+ * Supported widgets:
+ * - `GITHUB_ACTIVITY` → GitHub activity events
+ * - `GITHUB_REPOS` → GitHub repositories
+ * - `TIMESTAMP` → Current time badge or formatted timestamp
+ * - `WAKATIME` → WakaTime coding stats
+ * - `FEED` → RSS feed content
+ *
+ * Configuration can be partially provided in the template comment or via GitHub Action inputs.
+ */
 async function run() {
-  const token = core.getInput("github_token");
-  const template = core.getInput("template");
-  const readme = core.getInput("readme");
-  const username = core.getInput("username");
-  const subscriptions = core.getInput("feed");
+  const token = core.getInput("github_token");   // GitHub token for API calls
+  const template = core.getInput("template");    // Path to template file
+  const readme = core.getInput("readme");        // Output README path
+  const username = core.getInput("username");    // GitHub username
+  const subscriptions = core.getInput("feed");   // RSS feed JSON file path
   const octokit = github.getOctokit(token);
 
   let source = fs.readFileSync(template, "utf-8");
 
-  const activityWidgets = widgets("GITHUB_ACTIVITY", source);
+  // Process GitHub activity widgets
+  const activityWidgets = widgets<ActivityConfig>("GITHUB_ACTIVITY", source);
   if (activityWidgets) {
     core.info(`Found ${activityWidgets.length} activity widget.`);
     core.info(`Collecting activity for user ${username}...`);
-    const events = await octokit.activity.listPublicEventsForUser({
+    const events = await octokit.rest.activity.listPublicEventsForUser({
       username,
       per_page: 100
     });
@@ -31,11 +55,12 @@ async function run() {
     }
   }
 
-  const reposWidgets = widgets("GITHUB_REPOS", source);
+  // Process GitHub repository widgets
+  const reposWidgets = widgets<ReposConfig>("GITHUB_REPOS", source);
   if (reposWidgets) {
     core.info(`Found ${reposWidgets.length} repos widget.`);
     core.info(`Collecting repos for user ${username}...`);
-    const repositories = await octokit.repos.listForUser({
+    const repositories = await octokit.rest.repos.listForUser({
       username,
       type: "all",
       per_page: 100
@@ -46,7 +71,8 @@ async function run() {
     }
   }
 
-  const timestampWidgets = widgets("TIMESTAMP", source);
+  // Process timestamp widgets
+  const timestampWidgets = widgets<TimestampConfig>("TIMESTAMP", source);
   if (timestampWidgets) {
     core.info(`Found ${timestampWidgets.length} timestamp widget.`);
     for (const widget of timestampWidgets) {
@@ -64,9 +90,11 @@ async function run() {
       source = source.replace(widget.matched, await wakatime(widget));
     }
   }
+
+  // Process RSS feed widgets
   if (fs.existsSync(subscriptions)) {
     const subscribe = JSON.parse(fs.readFileSync(subscriptions, "utf-8"));
-    const feedWidgets = widgets("FEED", source);
+    const feedWidgets = widgets<FeedConfig>("FEED", source);
     if (feedWidgets) {
       core.info(`Found ${feedWidgets.length} feed widget.`);
       for (const widget of feedWidgets) {
@@ -75,9 +103,11 @@ async function run() {
     }
   }
 
+  // Write final output to README
   fs.writeFileSync(readme, source);
 }
 
+// Execute the runner and handle errors
 run().catch(error => {
   core.error(error);
   process.exit(1);

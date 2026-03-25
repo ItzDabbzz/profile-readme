@@ -8,65 +8,59 @@ import { URL } from "url";
  */
 export interface FeedConfig {
   /** Maximum number of feed items to display. */
-  rows: number;
+  rows?: number;
 
   /** Render raw markdown list instead of table format. */
-  raw: boolean;
+  raw?: boolean;
 
   /** List of feed names to include (filters `subscribe`). */
-  select: string[];
+  select?: string[];
 
   /** Randomize the order of feed items. */
-  shuffle: boolean;
+  shuffle?: boolean;
 
   /** Whether to render a title/header above the feed. */
-  title: boolean;
+  title?: boolean;
 }
 
 /**
- * Serializes a single RSS item into markdown.
+ * Sanitizes a string for Markdown table cells.
+ * - Removes line breaks
+ * - Escapes pipe characters
+ * - Trims whitespace
+ * - Optionally truncates long strings
+ */
+function sanitizeForTable(str: string, maxLength = 120): string {
+  if (!str) return "";
+  let clean = str.replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|").trim();
+  if (clean.length > maxLength) clean = clean.slice(0, maxLength) + "…";
+  return clean;
+}
+
+/**
+ * Serializes a single RSS item into Markdown.
  *
  * @param item - RSS item from rss-parser
  * @param index - Display index (1-based)
- * @param raw - Whether to render in raw (list) format instead of table row
- * @returns Markdown string representing the item
+ * @param raw - Whether to render raw list instead of table
  */
-function serialize(item: Item, index: number, raw: boolean | undefined) {
-  let title = item
-    .title!.split("\n")
-    .join("")
-    .trim();
-
-  const link = new URL(
-    item.link! || "https://www.youtube.com/watch?v=oHg5SJYRHA0"
-  );
+function serialize(item: Item, index: number, raw?: boolean) {
+  const title = sanitizeForTable(item.title || "Untitled");
+  const link = new URL(item.link || "https://www.youtube.com/watch?v=oHg5SJYRHA0");
+  const hostname = sanitizeForTable(link.hostname);
 
   if (raw) {
-    return `${index}. [${title}](${link.href}) ([${link.hostname}](${link.origin}))`;
+    return `${index}. [${title}](${link.href}) ([${hostname}](${link.origin}))`;
   } else {
-    return `| ${index} | [${title}](${link.href})  | [${link.hostname}](${link.origin}) |`;
+    return `| ${index} | [${title}](${link.href}) | [${hostname}](${link.origin}) |`;
   }
 }
 
 /**
- * Fetches and renders an RSS feed as a markdown widget.
- *
- * - Randomly selects one feed from the provided `subscribe` map
- * - Optionally filters feeds using `config.select`
- * - Supports shuffling, truncation, and multiple output formats
+ * Fetches and renders an RSS feed as a Markdown widget.
  *
  * @param subscribe - Map of feed names to RSS URLs
- * @param widget - Widget instance containing rendering configuration
- *
- * @returns Markdown string representing the rendered feed
- *
- * @example
- * ```ts
- * const output = await feed(
- *   { "Tech": "https://example.com/rss.xml" },
- *   widget
- * );
- * ```
+ * @param widget - Widget instance containing configuration
  */
 export async function feed(
   subscribe: { [key: string]: string },
@@ -74,45 +68,44 @@ export async function feed(
 ) {
   let feeds = Object.entries(subscribe);
 
-  // Filter selected feeds if specified
-  if (widget.config.select) {
+  // Filter selected feeds if provided
+  if (widget.config.select && widget.config.select.length > 0) {
     feeds = feeds.filter(([name]) => widget.config.select!.includes(name));
   }
 
   // Randomly pick one feed
-  const [name, url] = pickRandomItems(feeds, 1)[0];
-  const feed = new Parser();
+  const [feedName, feedUrl] = pickRandomItems(feeds, 1)[0];
 
-  // Fetch and parse RSS feed
-  let result = await feed.parseURL(url);
+  const parser = new Parser();
+  const result = await parser.parseURL(feedUrl);
+
+  let items = result.items || [];
 
   // Shuffle items if enabled
   if (widget.config.shuffle) {
-    result.items = result
-      .items!.map((a) => ({ sort: Math.random(), value: a }))
+    items = items
+      .map((item) => ({ sort: Math.random(), value: item }))
       .sort((a, b) => a.sort - b.sort)
       .map((a) => a.value);
   }
 
   // Limit number of items
-  result.items = result.items!.slice(0, widget.config.rows ?? 5);
+  items = items.slice(0, widget.config.rows ?? 5);
 
   // Serialize items
-  let content = result.items
-    .map((item, index) => serialize(item, index + 1, widget.config.raw))
+  let content = items
+    .map((item, idx) => serialize(item, idx + 1, widget.config.raw))
     .join("\n");
 
   // Add table header if not raw
   if (!widget.config.raw) {
-    content = "|Index|Posts|Domain|\n|---|---|---|---|\n" + content;
+    content = "|Index|Posts|Domain|\n|---|---|---|\n" + content;
   }
 
-  // Add title/header if enabled
+  // Add feed title if enabled
   if (widget.config.title) {
-    const contentTitle = `${
-      pickRandomItems(["📰", "📋", "📑", "📖", "🔖"], 1)[0]
-    } ${name}`;
-    content = `### ${contentTitle}\n > This is generated from feed provided [here](${url}). Add it to your rss reader! \n\n --- \n ${content}`;
+    const emoji = pickRandomItems(["📰", "📋", "📑", "📖", "🔖"], 1)[0];
+    content = `### ${emoji} ${feedName}\n> Generated from feed [here](${feedUrl}). Add it to your RSS reader!\n\n---\n${content}`;
   }
 
   return content;
