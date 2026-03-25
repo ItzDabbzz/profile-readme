@@ -1,6 +1,7 @@
 import moment from 'moment';
 import { capitalize } from '../helpers';
 import { Widget } from '../widget';
+import * as core from '@actions/core';
 
 /**
  * Configuration options for the activity widget.
@@ -284,5 +285,6 @@ export function activity(events: any, widget: Widget<ActivityConfig>): string {
     const built = filtered.map(item => buildEvent(item, config));
     if (style === 'list') return renderList(built, showDate);
     if (style === 'compact') return renderCompact(built, showDate);
+    core.info(`Rendering activity widget with ${built.length} events in style "${style}".`);
     return renderTable(built, showDate);
 }

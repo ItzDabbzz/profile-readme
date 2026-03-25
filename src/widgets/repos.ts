@@ -1,5 +1,6 @@
 import moment from 'moment';
 import { Widget } from '../widget';
+import * as core from '@actions/core';
 
 /**
  * Configuration options for the repositories widget.
@@ -254,5 +255,6 @@ export function repos(repositories: any, widget: Widget<ReposConfig>): string {
         return `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${lines}`;
     }
 
+    core.info(`Generated ${filtered.length} repositories for widget "${widget.matched}" with style "${style}".`);
     return lines;
 }

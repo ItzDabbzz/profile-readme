@@ -2,6 +2,7 @@ import Parser, { Item } from 'rss-parser';
 import { URL } from 'url';
 import { capitalize, pickRandomItems } from '../helpers';
 import { Widget } from '../widget';
+import * as core from '@actions/core';
 
 /**
  * Configuration options for the RSS feed widget.
@@ -105,6 +106,8 @@ export async function feed(subscribe: { [key: string]: string }, widget: Widget<
         const emoji = pickRandomItems(['📰', '📋', '📑', '📖', '🔖'], 1)[0];
         content = `### ${emoji} ${feedName}\n> Generated from feed [here](${feedUrl}). Add it to your RSS reader!\n\n---\n${content}`;
     }
+
+    core.info(`Generated feed widget for "${feedName}" with ${items.length} items.`);
 
     return content;
 }

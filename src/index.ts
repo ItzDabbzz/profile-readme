@@ -32,6 +32,7 @@ import { WakaTimeConfig, wakatime } from './widgets/wakatime';
  */
 async function run() {
     const token = core.getInput('github_token'); // GitHub token for API calls
+    const wakaTimeKey = core.getInput('wakatime_key');
     const template = core.getInput('template'); // Path to template file
     const readme = core.getInput('readme'); // Output README path
     const username = core.getInput('username'); // GitHub username
@@ -84,9 +85,8 @@ async function run() {
     // Process WakaTime widgets
     const wakatimeWidgets = widgets<WakaTimeConfig>('WAKATIME', source);
     if (wakatimeWidgets) {
-        const key = core.getInput('wakatime_key');
         for (const widget of wakatimeWidgets) {
-            if (!widget.config.apiKey) (widget.config as any).apiKey = key;
+            if (!widget.config.apiKey && wakaTimeKey) (widget.config as any).apiKey = wakaTimeKey;
             source = source.replace(widget.matched, await wakatime(widget));
         }
     }

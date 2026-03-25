@@ -1,4 +1,5 @@
 import { Widget } from '../widget';
+import * as core from '@actions/core';
 
 /* =========================
    CONFIG (INPUT = OPTIONAL)
@@ -84,7 +85,9 @@ type ResolvedConfig = {
  * @returns Fully resolved configuration
  */
 function resolveConfig(input: WakaTimeConfig): ResolvedConfig {
-    const apiKey = input.apiKey ?? process.env.INPUT_WAKATIME_KEY ?? '';
+    const apiKey = input.apiKey || process.env.WAKATIME_KEY || '';
+
+    core.info(`Using WakaTime API Key: ${apiKey ? '***' + apiKey.slice(-4) : 'None'}`);
 
     return {
         apiKey,
@@ -275,6 +278,7 @@ export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> 
     const config = resolveConfig(widget.config);
 
     if (!config.apiKey) {
+        core.warning('WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable.');
         return `⚠️ Missing WakaTime API key`;
     }
 
@@ -285,6 +289,7 @@ export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> 
     });
 
     if (!res.ok) {
+        core.error(`WakaTime API request failed with status ${res.status}: ${res.statusText}`);
         return `❌ API Error ${res.status}`;
     }
 
@@ -332,5 +337,6 @@ export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> 
         sections.push(renderSection('📁 Projects', data.projects.slice(0, config.rows), config));
     }
 
+    core.info(`WakaTime widget generated successfully with ${sections.length} sections.`);
     return sections.join('\n\n');
 }

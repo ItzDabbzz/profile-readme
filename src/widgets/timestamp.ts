@@ -1,5 +1,6 @@
 import moment from 'moment-timezone';
 import { Widget } from '../widget';
+import * as core from '@actions/core';
 
 /**
  * Configuration options for the timestamp widget.
@@ -126,7 +127,7 @@ function safeBadgeValue(value: string): string {
 export function timestamp(widget: Widget<TimestampConfig>): string {
     const config = resolveConfig(widget.config);
     const now = getMoment(config.tz);
-
+    core.info(`Generating timestamp widget with config: ${JSON.stringify(config)}`);
     let value: string;
 
     switch (config.mode) {

@@ -36098,6 +36098,7 @@ function timestamp(widget) {
 // src/widgets/wakatime.ts
 function resolveConfig2(input) {
   const apiKey = input.apiKey ?? process.env.INPUT_WAKATIME_KEY ?? "";
+  info(`Using WakaTime API Key: ${apiKey ? "***" + apiKey.slice(-4) : "None"}`);
   return {
     apiKey,
     range: input.range ?? "last_7_days",
@@ -36221,6 +36222,7 @@ async function wakatime(widget) {
 // src/index.ts
 async function run() {
   const token = getInput("github_token");
+  const wakaTimeKey = getInput("wakatime_key");
   const template = getInput("template");
   const readme = getInput("readme");
   const username = getInput("username");
@@ -36264,9 +36266,8 @@ async function run() {
   }
   const wakatimeWidgets = widgets("WAKATIME", source);
   if (wakatimeWidgets) {
-    const key = getInput("wakatime_key");
     for (const widget of wakatimeWidgets) {
-      if (!widget.config.apiKey) widget.config.apiKey = key;
+      if (!widget.config.apiKey && wakaTimeKey) widget.config.apiKey = wakaTimeKey;
       source = source.replace(widget.matched, await wakatime(widget));
     }
   }
