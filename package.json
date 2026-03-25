@@ -15,8 +15,8 @@
     },
     "scripts": {
         "build": "tsup",
-        "format": "prettier --write **/*.ts",
-        "format-check": "prettier --check **/*.ts",
+        "check": "biome check",
+        "check:fix": "biome check --fix",
         "test": "jest",
         "export": "bun format && bun run build && git add dist/index.js"
     },
