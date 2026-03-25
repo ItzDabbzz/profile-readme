@@ -55,6 +55,15 @@ async function run() {
     }
   }
 
+  // Process WakaTime widgets
+  const wakatimeWidgets = widgets<WakaTimeConfig>("WAKATIME", source);
+  if (wakatimeWidgets) {
+    const key = core.getInput("wakatime_key");
+    for (const widget of wakatimeWidgets) {
+      if (!widget.config.apiKey) (widget.config as any).apiKey = key;
+      source = source.replace(widget.matched, await wakatime(widget));
+    }
+  }
   if (fs.existsSync(subscriptions)) {
     const subscribe = JSON.parse(fs.readFileSync(subscriptions, "utf-8"));
     const feedWidgets = widgets("FEED", source);
