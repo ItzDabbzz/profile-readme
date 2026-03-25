@@ -1,6 +1,6 @@
-name: "Profile Readme"
-description: "Collection of widgets for your profile README"
-author: "actions-js"
+name: "Profile Readme Widgets"
+description: "Collection of widgets for your profile README updated and extended with love"
+author: "ItzDabbzz"
 inputs:
   github_token:
     description: 'Token for the repo. Can be passed in using $\{{ secrets.GITHUB_TOKEN }}'
@@ -19,8 +19,11 @@ inputs:
     description: "README.md output file path"
     required: true
     default: "./README.md"
+  wakatime_key:
+    description: "WakaTime API Key"
+    required: false
 runs:
-  using: "node12"
+  using: 'node20'
   main: "dist/index.js"
 branding:
   icon: "star"
