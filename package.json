@@ -1,9 +1,9 @@
 {
     "name": "profile-readme",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "description": "Collection of widgets for your profile README",
     "main": "lib/index.js",
-    "repository": "https://github.com/itzdabbzz/profile-readme.git",
+    "repository": "https://github.com/ItzDabbzz/profile-readme.git",
     "author": "Filippo R. (Qu4k)",
     "maintainers": ["ItzDabbzz"],
     "license": "MIT",
