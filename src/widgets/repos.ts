@@ -1,7 +1,6 @@
 import * as core from '@actions/core';
 import moment from 'moment';
 import { Widget } from '../widget';
-import { writeTempJson } from '../helpers';
 
 /**
  * Configuration options for the repositories widget.

@@ -1,30 +1,30 @@
-name: "Profile Readme Widgets"
-description: "Collection of widgets for your profile README updated and extended with love"
 author: "ItzDabbzz"
+branding:
+  color: "yellow"
+  icon: "star"
+description: "Collection of widgets for your profile README updated and extended with love"
 inputs:
+  feed:
+    description: "FEED.json file path"
+    required: false
   github_token:
     description: 'Token for the repo. Can be passed in using $\{{ secrets.GITHUB_TOKEN }}'
+    required: true
+  readme:
+    default: "./README.md"
+    description: "README.md output file path"
+    required: true
+  template:
+    default: "./TEMPLATE.md"
+    description: "TEMPLATE.md file path"
     required: true
   username:
     description: "Github profile username"
     required: true
-  feed:
-    required: false
-    description: "FEED.json file path"
-  template:
-    description: "TEMPLATE.md file path"
-    required: true
-    default: "./TEMPLATE.md"
-  readme:
-    description: "README.md output file path"
-    required: true
-    default: "./README.md"
   wakatime_key:
     description: "WakaTime API Key"
     required: false
+name: "Profile Readme Widgets"
 runs:
-  using: 'node20'
   main: "dist/index.js"
-branding:
-  icon: "star"
-  color: "yellow"
+  using: 'node24'
