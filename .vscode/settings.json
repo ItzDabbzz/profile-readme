@@ -10,6 +10,10 @@
         "widgets/wakatime",
         "widgets/timestamp",
         "widgets/repo",
-        "widgets/feed"
+        "widgets/feed",
+        "lint",
+        "tests",
+        "example",
+        "widgets/activity"
     ]
 }

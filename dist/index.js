@@ -31562,6 +31562,9 @@ function issueCommand(command, properties, message) {
   const cmd = new Command(command, properties, message);
   process.stdout.write(cmd.toString() + os.EOL);
 }
+function issue(name, message = "") {
+  issueCommand(name, {}, message);
+}
 var CMD_STRING = "::";
 var Command = class {
   constructor(command, properties, message) {
@@ -31979,8 +31982,17 @@ function getInput(name, options) {
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
 }
+function warning(message, properties = {}) {
+  issueCommand("warning", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
+}
 function info(message) {
   process.stdout.write(message + os3.EOL);
+}
+function startGroup(name) {
+  issue("group", name);
+}
+function endGroup() {
+  issue("endgroup");
 }
 
 // node_modules/@actions/github/lib/context.js
@@ -35763,76 +35775,195 @@ function pickRandomItems(items, limit = 2) {
 
 // src/widgets/activity.ts
 var EVENT_BADGE = {
-  PushEvent: { label: "push", color: "4c9be8", emoji: "\u2B06\uFE0F" },
+  CommitCommentEvent: { label: "comment", color: "79c0ff", emoji: "\u{1F4AC}" },
+  CreateEvent: { label: "create", color: "58a6ff", emoji: "\u{1F33F}" },
+  DeleteEvent: { label: "delete", color: "f85149", emoji: "\u{1F5D1}\uFE0F" },
+  ForkEvent: { label: "fork", color: "56d364", emoji: "\u{1F374}" },
+  GollumEvent: { label: "wiki", color: "8b949e", emoji: "\u{1F4D6}" },
+  IssueCommentEvent: { label: "comment", color: "79c0ff", emoji: "\u{1F5E3}\uFE0F" },
+  IssuesEvent: { label: "issue", color: "e4e669", emoji: "\u2757" },
+  MemberEvent: { label: "member", color: "a371f7", emoji: "\u{1F465}" },
+  PublicEvent: { label: "public", color: "3fb950", emoji: "\u{1F389}" },
   PullRequestEvent: { label: "PR", color: "a371f7", emoji: "\u{1F500}" },
   PullRequestReviewEvent: { label: "review", color: "f0883e", emoji: "\u{1F440}" },
   PullRequestReviewCommentEvent: { label: "review", color: "f0883e", emoji: "\u{1F4AC}" },
-  IssuesEvent: { label: "issue", color: "e4e669", emoji: "\u2757" },
-  IssueCommentEvent: { label: "comment", color: "79c0ff", emoji: "\u{1F5E3}" },
-  ForkEvent: { label: "fork", color: "56d364", emoji: "\u{1F374}" },
+  PullRequestReviewThreadEvent: { label: "thread", color: "f0883e", emoji: "\u{1F9F5}" },
+  PushEvent: { label: "push", color: "4c9be8", emoji: "\u2B06\uFE0F" },
   ReleaseEvent: { label: "release", color: "3fb950", emoji: "\u{1F680}" },
-  WatchEvent: { label: "star", color: "e3b341", emoji: "\u2B50" },
-  CreateEvent: { label: "create", color: "58a6ff", emoji: "\u{1F33F}" },
-  DeleteEvent: { label: "delete", color: "f85149", emoji: "\u{1F5D1}" },
-  PublicEvent: { label: "public", color: "3fb950", emoji: "\u{1F389}" },
-  MemberEvent: { label: "member", color: "a371f7", emoji: "\u{1F465}" },
-  SponsorshipEvent: { label: "sponsor", color: "db61a2", emoji: "\u{1F496}" }
+  SponsorshipEvent: { label: "sponsor", color: "db61a2", emoji: "\u{1F496}" },
+  WatchEvent: { label: "star", color: "e3b341", emoji: "\u2B50" }
 };
 function badge(type) {
   const b = EVENT_BADGE[type];
   if (!b) return "";
-  return `![${b.label}](https://img.shields.io/badge/${encodeURIComponent(b.label)}-${b.color}?style=flat-square)`;
+  return `![${b.label}](https://img.shields.io/badge/${b.label}-${b.color}?style=flat-square)`;
 }
 function formatDate(date, config) {
-  if (!config.showDate || !date) return "";
-  const fmt = config.dateFormat && config.dateFormat !== "relative" ? (0, import_moment.default)(date).format(config.dateFormat) : (0, import_moment.default)(date).fromNow();
-  return fmt;
-}
-var serializers = {
-  IssueCommentEvent: (item) => {
-    return `\u{1F5E3} Commented on #${item.payload.issue.number} in ${item.repo.name}`;
-  },
-  IssuesEvent: (item) => {
-    return `\u2757\uFE0F ${capitalize(item.payload.action)} issue #${item.payload.issue.number} in ${item.repo.name}`;
-  },
-  PullRequestEvent: (item) => {
-    const emoji = item.payload.action === "opened" ? "\u{1F4AA}" : "\u274C";
-    const line = item.payload.pull_request.merged ? "\u{1F389} Merged" : `${emoji} ${capitalize(item.payload.action)}`;
-    return `${line} PR #${item.payload.pull_request.number} in ${item.repo.name}`;
-  },
-  ForkEvent: (item) => {
-    return `\u{1F374} Forked ${item.payload.forkee.full_name} from ${item.repo.name}`;
-  },
-  ReleaseEvent: (item) => {
-    return `\u{1F4E6} Released "${item.payload.release.name}" in ${item.repo.name}`;
-  },
-  PushEvent: (item) => {
-    const commits = item.payload.size > 1 ? `${item.payload.size} commits` : `${item.payload.size} commit`;
-    return `\u2B06\uFE0F Pushed ${commits} to ${item.repo.name}`;
+  if (!config.showDate) return "";
+  if (config.dateFormat && config.dateFormat !== "relative") {
+    return (0, import_moment.default)(date).format(config.dateFormat);
   }
-};
-function buildEvent(item, config) {
-  const raw = config.raw ?? false;
-  const showLinks = config.showLinks ?? true;
-  const b = EVENT_BADGE[item.type] ?? { emoji: "\u2022", label: item.type, color: "888" };
-  const { description, repo } = serializers[item.type](item, raw, showLinks);
+  return (0, import_moment.default)(date).fromNow();
+}
+function repoLink(repoName, links) {
+  return links ? `**[${repoName}](https://github.com/${repoName})**` : `**${repoName}**`;
+}
+function issueLink(repoName, num, links) {
+  return links ? `[#${num}](https://github.com/${repoName}/issues/${num})` : `#${num}`;
+}
+function prLink(repoName, num, links) {
+  return links ? `[#${num}](https://github.com/${repoName}/pull/${num})` : `#${num}`;
+}
+function releaseLink(repoName, tag, name, links) {
+  const label = name || tag;
+  return links ? `[\`${label}\`](https://github.com/${repoName}/releases/tag/${encodeURIComponent(tag)})` : `\`${label}\``;
+}
+function commitLink(repoName, sha, links) {
+  const short = sha.slice(0, 7);
+  return links ? `[\`${short}\`](https://github.com/${repoName}/commit/${sha})` : `\`${short}\``;
+}
+function refLink(repoName, ref, links) {
+  const name = ref.replace(/^refs\/heads\//, "");
+  return links ? `[\`${name}\`](https://github.com/${repoName}/tree/${encodeURIComponent(name)})` : `\`${name}\``;
+}
+function wikiLink(repoName, pageTitle, links) {
+  const slug = pageTitle.replace(/\s+/g, "-");
+  return links ? `[${pageTitle}](https://github.com/${repoName}/wiki/${encodeURIComponent(slug)})` : pageTitle;
+}
+function describeEvent(event, config) {
+  const repo = event.repo?.name ?? "unknown/unknown";
+  const payload = event.payload ?? {};
+  const links = config.showLinks ?? true;
+  switch (event.type) {
+    case "CommitCommentEvent": {
+      const sha = payload.comment?.commit_id ?? "";
+      return sha ? `Commented on commit ${commitLink(repo, sha, links)} in ${repoLink(repo, links)}` : `Commented on a commit in ${repoLink(repo, links)}`;
+    }
+    case "CreateEvent": {
+      const refType = payload.ref_type ?? "repository";
+      const ref = payload.ref ?? "";
+      if (refType === "repository") return `Created repository ${repoLink(repo, links)}`;
+      return `Created ${refType} ${refLink(repo, ref, links)} in ${repoLink(repo, links)}`;
+    }
+    case "DeleteEvent": {
+      const refType = payload.ref_type ?? "branch";
+      const ref = payload.ref ?? "";
+      return `Deleted ${refType} \`${ref}\` in ${repoLink(repo, links)}`;
+    }
+    case "ForkEvent": {
+      const forkee = payload.forkee?.full_name ?? repo;
+      return `Forked ${repoLink(repo, links)} \u2192 ${repoLink(forkee, links)}`;
+    }
+    case "GollumEvent": {
+      const pages = payload.pages ?? [];
+      if (pages.length === 0) return `Updated wiki in ${repoLink(repo, links)}`;
+      const first = pages[0];
+      const action = first.action === "created" ? "Created" : "Edited";
+      const pageTitle = first.title ?? first.page_name ?? "a page";
+      const suffix = pages.length > 1 ? ` (+${pages.length - 1} more)` : "";
+      return `${action} wiki page ${wikiLink(repo, pageTitle, links)}${suffix} in ${repoLink(repo, links)}`;
+    }
+    case "IssueCommentEvent": {
+      const num = payload.issue?.number;
+      const isPr = !!payload.issue?.pull_request;
+      const target = isPr ? prLink(repo, num, links) : issueLink(repo, num, links);
+      const kind = isPr ? "PR" : "issue";
+      return `Commented on ${kind} ${target} in ${repoLink(repo, links)}`;
+    }
+    case "IssuesEvent": {
+      const action = payload.action ?? "updated";
+      const num = payload.issue?.number;
+      const title = payload.issue?.title ?? "";
+      const link = issueLink(repo, num, links);
+      const titleStr = title ? ` \u2014 _${title}_` : "";
+      return `${capitalize(action)} issue ${link}${titleStr} in ${repoLink(repo, links)}`;
+    }
+    case "MemberEvent": {
+      const action = payload.action ?? "added";
+      const login = payload.member?.login ?? "someone";
+      return `${capitalize(action)} @${login} as collaborator to ${repoLink(repo, links)}`;
+    }
+    case "PublicEvent": {
+      return `Made ${repoLink(repo, links)} public`;
+    }
+    case "PullRequestEvent": {
+      const action = payload.action ?? "updated";
+      const pr = payload.pull_request;
+      const num = pr?.number;
+      const merged = pr?.merged ?? false;
+      const displayAction = action === "closed" && merged ? "merged" : action;
+      const title = pr?.title ?? "";
+      const titleStr = title ? ` \u2014 _${title}_` : "";
+      return `${capitalize(displayAction)} PR ${prLink(repo, num, links)}${titleStr} in ${repoLink(repo, links)}`;
+    }
+    case "PullRequestReviewEvent": {
+      const state = payload.review?.state ?? "reviewed";
+      const num = payload.pull_request?.number;
+      const stateLabel = {
+        approved: "Approved",
+        changes_requested: "Requested changes on",
+        commented: "Commented on",
+        dismissed: "Dismissed review on"
+      };
+      const verb = stateLabel[state] ?? "Reviewed";
+      return `${verb} PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
+    }
+    case "PullRequestReviewCommentEvent": {
+      const num = payload.pull_request?.number;
+      return `Commented on a review of PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
+    }
+    case "PullRequestReviewThreadEvent": {
+      const action = payload.action ?? "resolved";
+      const num = payload.pull_request?.number;
+      return `${capitalize(action)} a review thread on PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
+    }
+    case "PushEvent": {
+      const count = payload.size ?? payload.commits?.length ?? 0;
+      const ref = payload.ref ?? "";
+      const label = count === 1 ? "commit" : "commits";
+      const branch = refLink(repo, ref, links);
+      const head = payload.head ?? "";
+      const headStr = head ? ` (${commitLink(repo, head, links)})` : "";
+      return `Pushed ${count} ${label} to ${branch} in ${repoLink(repo, links)}${headStr}`;
+    }
+    case "ReleaseEvent": {
+      const action = payload.action ?? "published";
+      const tag = payload.release?.tag_name ?? "";
+      const name = payload.release?.name ?? "";
+      return `${capitalize(action)} release ${releaseLink(repo, tag, name, links)} in ${repoLink(repo, links)}`;
+    }
+    case "SponsorshipEvent": {
+      const action = payload.action ?? "started";
+      const login = payload.sponsorship?.sponsorable?.login ?? "someone";
+      const verb = action === "cancelled" ? "Cancelled sponsorship of" : "Started sponsoring";
+      return `${verb} @${login}`;
+    }
+    case "WatchEvent": {
+      return `Starred ${repoLink(repo, links)}`;
+    }
+    default:
+      return `${event.type?.replace(/Event$/, "") ?? "Unknown activity"} in ${repoLink(repo, links)}`;
+  }
+}
+function build(event, config) {
+  const b = EVENT_BADGE[event.type] ?? { emoji: "\u2022", label: event.type, color: "888" };
   return {
     emoji: b.emoji,
-    badgeStr: badge(item.type),
-    description,
-    repo,
-    date: formatDate(item.created_at, config)
+    badge: badge(event.type),
+    description: describeEvent(event, config),
+    repo: event.repo.name,
+    date: formatDate(event.created_at, config)
   };
 }
-function renderTable(events, showDate) {
+function renderTable(events, showDate, showLinks) {
   const dateHeader = showDate ? " When |" : "";
   const dateSep = showDate ? ":---|" : "";
   let out = `| | Event | Repo |${dateHeader}
 |---|---|---|${dateSep}
 `;
   for (const e of events) {
-    const dateCell = showDate && e.date ? ` \`${e.date}\` |` : showDate ? " \u2014 |" : "";
-    out += `| ${e.badgeStr} | ${e.description} | ${e.repo} |${dateCell}
+    const date = showDate ? ` \`${e.date || "\u2014"}\` |` : "";
+    out += `| ${e.badge} | ${e.emoji} ${e.description} | ${repoLink(e.repo, showLinks)} |${date}
 `;
   }
   return out.trim();
@@ -35840,88 +35971,211 @@ function renderTable(events, showDate) {
 function renderList(events, showDate) {
   return events.map((e) => {
     const date = showDate && e.date ? ` \u2014 \`${e.date}\`` : "";
-    return `* ${e.badgeStr} ${e.description} in ${e.repo}${date}`;
+    return `* ${e.badge} ${e.emoji} ${e.description}${date}`;
   }).join("\n");
 }
 function renderCompact(events, showDate) {
   return events.map((e) => {
-    const date = showDate && e.date ? ` \`${e.date}\`` : "";
-    return `${e.emoji} ${e.description} in ${e.repo}${date}`;
+    const date = showDate && e.date ? ` \`${e.date}\`` : "\n";
+    return `${e.emoji} ${e.description}${date}`;
   }).join("\n");
 }
 function activity(events, widget) {
+  startGroup("Activity Widgets");
   const config = widget.config;
-  const supportedTypes = Object.keys(serializers);
-  const include = config.include ?? supportedTypes;
+  const supported = Object.keys(EVENT_BADGE);
+  const include = config.include ?? supported;
   const exclude = config.exclude ?? [];
   const style = config.raw ? "compact" : config.style ?? "table";
   const showDate = config.showDate ?? false;
-  const filtered = events.data.filter((event) => Object.prototype.hasOwnProperty.call(serializers, event.type)).filter((event) => include.includes(event.type)).filter((event) => !exclude.includes(event.type)).slice(0, config.rows ?? 10);
+  const filtered = events.data.filter((e) => supported.includes(e.type)).filter((e) => include.includes(e.type)).filter((e) => !exclude.includes(e.type)).slice(0, config.rows ?? 10);
+  const built = filtered.map((e) => build(e, config));
   if (config.groupByRepo) {
     const grouped = /* @__PURE__ */ new Map();
-    for (const event of filtered) {
-      const key = event.repo.name;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(event);
+    for (const e of built) {
+      if (!grouped.has(e.repo)) grouped.set(e.repo, []);
+      grouped.get(e.repo).push(e);
     }
     return Array.from(grouped.entries()).map(([repo, items]) => {
       const header = `### \u{1F4C1} [${repo}](https://github.com/${repo})`;
-      const built2 = items.map((item) => buildEvent(item, config));
-      const body = style === "list" ? renderList(built2, showDate) : style === "compact" ? renderCompact(built2, showDate) : renderTable(built2, showDate);
+      const body = style === "list" ? renderList(items, showDate) : style === "compact" ? renderCompact(items, showDate) : renderTable(items, showDate, config.showLinks);
       return `${header}
 ${body}`;
     }).join("\n\n");
   }
-  const built = filtered.map((item) => buildEvent(item, config));
   if (style === "list") return renderList(built, showDate);
   if (style === "compact") return renderCompact(built, showDate);
-  return renderTable(built, showDate);
+  info(`Rendering activity with ${built.length} events`);
+  endGroup();
+  return renderTable(built, showDate, config.showLinks);
 }
 
 // src/widgets/feed.ts
 var import_rss_parser = __toESM(require_rss_parser());
 var import_url = require("url");
-function sanitizeForTable(str, maxLength = 120) {
+var FALLBACK_URL = "https://www.youtube.com/watch?v=oHg5SJYRHA0";
+var MAX_TITLE_LENGTH = 120;
+var TITLE_EMOJIS = ["\u{1F4F0}", "\u{1F4CB}", "\u{1F4D1}", "\u{1F4D6}", "\u{1F516}"];
+var feedCache = /* @__PURE__ */ new Map();
+var domainLastFetched = /* @__PURE__ */ new Map();
+function resolveConfig(input) {
+  return {
+    rows: input.rows ?? 5,
+    raw: input.raw ?? false,
+    select: input.select ?? [],
+    shuffle: input.shuffle ?? false,
+    title: input.title ?? false,
+    retries: input.retries ?? 3,
+    retryDelay: input.retryDelay ?? 2e3,
+    requestDelay: input.requestDelay ?? 500
+  };
+}
+function sanitizeForTable(str, maxLength = MAX_TITLE_LENGTH) {
   if (!str) return "";
   let clean = str.replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|").trim();
   if (clean.length > maxLength) clean = clean.slice(0, maxLength) + "\u2026";
   return clean;
 }
-function serialize(item, index, raw) {
-  const title = sanitizeForTable(item.title || "Untitled");
-  const link = new import_url.URL(item.link || "https://www.youtube.com/watch?v=oHg5SJYRHA0");
-  const hostname = sanitizeForTable(link.hostname);
-  if (raw) {
-    return `${index}. [${title}](${link.href}) ([${hostname}](${link.origin}))`;
-  } else {
-    return `| ${index} | [${title}](${link.href}) | [${hostname}](${link.origin}) |`;
+function extractHostname(href) {
+  try {
+    return new import_url.URL(href).hostname.replace(/^www\./, "");
+  } catch {
+    return href;
   }
 }
-async function feed(subscribe, widget) {
-  let feeds = Object.entries(subscribe);
-  if (widget.config.select && widget.config.select.length > 0) {
-    feeds = feeds.filter(([name]) => widget.config.select.includes(name));
+function normalizeItem(item) {
+  const href = item.link || FALLBACK_URL;
+  let parsed;
+  try {
+    parsed = new import_url.URL(href);
+  } catch {
+    parsed = new import_url.URL(FALLBACK_URL);
   }
-  const [feedName, feedUrl] = pickRandomItems(feeds, 1)[0];
-  const parser = new import_rss_parser.default();
-  const result = await parser.parseURL(feedUrl);
-  let items = result.items || [];
-  if (widget.config.shuffle) {
-    items = items.map((item) => ({ sort: Math.random(), value: item })).sort((a, b) => a.sort - b.sort).map((a) => a.value);
+  return {
+    title: sanitizeForTable(item.title || "Untitled"),
+    href: parsed.href,
+    hostname: extractHostname(parsed.hostname.replace(/^www\./, "")),
+    origin: parsed.origin
+  };
+}
+function serializeItem(item, index, raw) {
+  if (raw) {
+    return `${index}. [${item.title}](${item.href}) ([${item.hostname}](${item.origin}))`;
   }
-  items = items.slice(0, widget.config.rows ?? 5);
-  let content = items.map((item, idx) => serialize(item, idx + 1, widget.config.raw)).join("\n");
-  if (!widget.config.raw) {
-    content = "|Index|Posts|Domain|\n|---|---|---|\n" + content;
-  }
-  if (widget.config.title) {
-    const emoji = pickRandomItems(["\u{1F4F0}", "\u{1F4CB}", "\u{1F4D1}", "\u{1F4D6}", "\u{1F516}"], 1)[0];
-    content = `### ${emoji} ${feedName}
-> Generated from feed [here](${feedUrl}). Add it to your RSS reader!
+  return `| ${index} | [${item.title}](${item.href}) | [${item.hostname}](${item.origin}) |`;
+}
+function wrapInTable(rows) {
+  return `|Index|Posts|Domain|
+|---|---|---|
+${rows.join("\n")}`;
+}
+function prependTitle(content, source) {
+  const emoji = pickRandomItems(TITLE_EMOJIS, 1)[0];
+  return `### ${emoji} ${source.name}
+> Generated from feed [here](${source.url}). Add it to your RSS reader!
 
 ---
 ${content}`;
+}
+async function throttleByDomain(domain, minGapMs) {
+  const last = domainLastFetched.get(domain);
+  if (last) {
+    const elapsed = Date.now() - last;
+    if (elapsed < minGapMs) {
+      const wait = minGapMs - elapsed;
+      info(`Throttling ${domain} \u2014 waiting ${wait}ms`);
+      await new Promise((res) => setTimeout(res, wait));
+    }
   }
+}
+async function fetchFeed(parser, url, retries, retryDelay, requestDelay) {
+  if (feedCache.has(url)) {
+    info(`Cache hit \u2014 skipping fetch for ${url}`);
+    return feedCache.get(url);
+  }
+  let domain;
+  try {
+    domain = new import_url.URL(url).hostname;
+  } catch {
+    domain = url;
+  }
+  await throttleByDomain(domain, requestDelay);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const result = await parser.parseURL(url);
+      feedCache.set(url, result);
+      domainLastFetched.set(domain, Date.now());
+      return result;
+    } catch (err) {
+      const msg = err?.message ?? "";
+      const status = parseInt(msg.match(/\d{3}/)?.[0] ?? "0", 10);
+      const isRetryable = status === 429 || status >= 500 && status < 600;
+      const isLast = attempt === retries;
+      if (isLast || !isRetryable) {
+        error(`Feed fetch failed for ${url} after ${attempt} attempt(s): ${msg}`);
+        throw err;
+      }
+      const delay = retryDelay * attempt;
+      warning(`Feed fetch attempt ${attempt} failed (${msg}). Retrying in ${delay}ms...`);
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+  throw new Error(`fetchFeed: exhausted retries for ${url}`);
+}
+function resolveEligibleFeeds(subscribe, select) {
+  let entries = Object.entries(subscribe).map(([name, url]) => ({ name, url }));
+  if (select.length > 0) {
+    entries = entries.filter((f) => select.includes(f.name));
+    if (entries.length === 0) {
+      throw new Error(
+        `Feed widget: none of the selected feeds exist: [${select.join(", ")}]. Available: [${Object.keys(subscribe).join(", ")}]`
+      );
+    }
+  }
+  if (entries.length === 0) {
+    throw new Error("Feed widget: subscribe map is empty \u2014 no feeds to render.");
+  }
+  return entries;
+}
+function processItems(items, shuffle, rows) {
+  if (shuffle) {
+    items = [...items].sort(() => Math.random() - 0.5);
+  }
+  return items.slice(0, rows);
+}
+async function feed(subscribe, widget) {
+  startGroup("Feed Widgets");
+  const config = resolveConfig(widget.config);
+  let eligible;
+  try {
+    eligible = resolveEligibleFeeds(subscribe, config.select);
+  } catch (err) {
+    error(err.message);
+    return `> \u26A0\uFE0F Feed widget configuration error: ${err.message}`;
+  }
+  const source = pickRandomItems(eligible, 1)[0];
+  info(`Selected feed: "${source.name}" \u2192 ${source.url}`);
+  const parser = new import_rss_parser.default();
+  let result;
+  try {
+    result = await fetchFeed(parser, source.url, config.retries, config.retryDelay, config.requestDelay);
+  } catch (err) {
+    return `> \u26A0\uFE0F Could not load feed **${source.name}**: ${err.message}. It may be temporarily unavailable.`;
+  }
+  const rawItems = result.items ?? [];
+  const processed = processItems(rawItems, config.shuffle, config.rows);
+  if (processed.length === 0) {
+    warning(`Feed "${source.name}" returned no items.`);
+    return `> \u26A0\uFE0F Feed **${source.name}** is currently empty.`;
+  }
+  const normalized = processed.map(normalizeItem);
+  const rows = normalized.map((item, idx) => serializeItem(item, idx + 1, config.raw));
+  let content = config.raw ? rows.join("\n") : wrapInTable(rows);
+  if (config.title) {
+    content = prependTitle(content, source);
+  }
+  info(`Generated feed widget for "${source.name}" with ${processed.length} items.`);
+  endGroup();
   return content;
 }
 
@@ -35947,7 +36201,8 @@ var LANGUAGE_COLOR = {
   Dart: "00B4AB",
   Elixir: "6e4a7e",
   Zig: "ec915c",
-  Haskell: "5e5086"
+  Haskell: "5e5086",
+  "N/A": "000000"
 };
 var LANGUAGE_EMOJI = {
   TypeScript: "\u{1F4D8}",
@@ -35969,7 +36224,8 @@ var LANGUAGE_EMOJI = {
   Dart: "\u{1F3AF}",
   Elixir: "\u{1F4A7}",
   Zig: "\u26A1",
-  Haskell: "\u03BB"
+  Haskell: "\u03BB",
+  "N/A": "\u274C"
 };
 var comparators = {
   stars: (a, b) => b.stargazers_count - a.stargazers_count,
@@ -35977,7 +36233,7 @@ var comparators = {
   created: (a, b) => (0, import_moment2.default)(b.created_at).diff((0, import_moment2.default)(a.created_at)),
   updated: (a, b) => (0, import_moment2.default)(b.updated_at).diff((0, import_moment2.default)(a.updated_at)),
   pushed: (a, b) => (0, import_moment2.default)(b.pushed_at).diff((0, import_moment2.default)(a.pushed_at)),
-  full_name: (a, b) => a.full_name.localeCompare(b.full_name),
+  full_name: (a, b) => b.full_name.localeCompare(a.full_name),
   size: (a, b) => b.size - a.size
 };
 function starsBadge(item) {
@@ -35987,18 +36243,18 @@ function forksBadge(item) {
   return `![Forks](https://img.shields.io/github/forks/${item.full_name}?style=flat-square&color=56d364&labelColor=1c2128&label=\u{1F374})`;
 }
 function languageBadge(item) {
-  const lang = item.language;
-  if (!lang) return "";
+  var lang = item.language;
+  if (!lang) lang = "N/A";
   const color = LANGUAGE_COLOR[lang] ?? "555";
   return `![${lang}](https://img.shields.io/badge/${encodeURIComponent(lang)}-${color}?style=flat-square)`;
 }
 function languageText(item) {
-  const lang = item.language;
-  if (!lang) return "";
+  var lang = item.language;
+  if (!lang) lang = "N/A";
   const emoji = LANGUAGE_EMOJI[lang] ?? "\u{1F4BB}";
   return `${emoji} \`${lang}\``;
 }
-function serialize2(item, config) {
+function serialize(item, config) {
   const raw = config.raw ?? false;
   const showStars = config.showStars ?? true;
   const showDesc = config.showDescription ?? true;
@@ -36007,30 +36263,36 @@ function serialize2(item, config) {
   const showBadges = config.showBadges ?? true;
   const style = config.style ?? "table";
   const archived = item.archived ? raw ? " [archived]" : " _(archived)_" : "";
-  const desc = showDesc && item.description && item.description !== "null" ? item.description : "";
+  const desc = showDesc && item.description && item.description !== "null" ? "`" + item.description + "`" : "";
   if (raw || style === "compact") {
     const stars = showStars ? ` \u2B50 ${item.stargazers_count}` : "";
     const forks = showForks ? ` \u{1F374} ${item.forks_count}` : "";
     const lang = showLang && item.language ? ` [${item.language}]` : "";
-    return `\u{1F4E6} ${item.full_name}${stars}${forks}${lang}${archived}${desc ? ` \u2014 ${desc}` : ""}`;
+    const descStr = desc ? ` \u2014 ${desc}` : "";
+    return `\u{1F4E6} ${item.full_name}${stars}${forks}${lang}${archived}${descStr}`;
   }
   if (style === "list") {
-    const repoLink = `**[${item.full_name}](${item.html_url})**${archived}`;
+    const repoLink2 = `**[${item.full_name}](${item.html_url})**${archived}`;
     const stars = showStars ? showBadges ? ` ${starsBadge(item)}` : ` \u2B50 \`${item.stargazers_count}\`` : "";
     const forks = showForks ? showBadges ? ` ${forksBadge(item)}` : ` \u{1F374} \`${item.forks_count}\`` : "";
     const lang = showLang ? showBadges ? ` ${languageBadge(item)}` : ` ${languageText(item)}` : "";
     const descStr = desc ? `
   > ${desc}` : "";
-    return `* ${repoLink}${stars}${forks}${lang}${descStr}`;
+    return `* ${repoLink2}${stars}${forks}${lang}${descStr}`;
   }
   const repoCell = `[${item.full_name}](${item.html_url})${archived}`;
   const starsCell = showStars ? showBadges ? starsBadge(item) : `\u2B50 \`${item.stargazers_count}\`` : "";
   const forksCell = showForks ? showBadges ? forksBadge(item) : `\u{1F374} \`${item.forks_count}\`` : "";
   const langCell = showLang ? showBadges ? languageBadge(item) : languageText(item) : "";
   const descCell = desc;
-  return `| \u{1F4E6} | ${repoCell} | ${starsCell}${forksCell} | ${langCell} | ${descCell} |`;
+  if (config.showLanguage) {
+    return `| \u{1F4E6} | ${repoCell} | ${starsCell}${forksCell} | ${langCell} | ${descCell} |`;
+  } else {
+    return `| \u{1F4E6} | ${repoCell} | ${starsCell}${forksCell} | ${descCell} |`;
+  }
 }
 function repos(repositories, widget) {
+  startGroup("Repo Widgets");
   const config = widget.config;
   const sortKey = config.sort ?? "stars";
   const order = config.order ?? "desc";
@@ -36039,19 +36301,24 @@ function repos(repositories, widget) {
   const comparator = comparators[sortKey] ?? comparators.stars;
   const directed = order === "asc" ? (a, b) => -comparator(a, b) : comparator;
   const filtered = repositories.data.filter((item) => !item.private).filter((item) => !exclude.includes(item.full_name)).filter((item) => config.showArchived ? true : !item.archived).filter((item) => config.showForks_repos ? true : !item.fork).filter((item) => config.minStars != null ? item.stargazers_count >= config.minStars : true).filter((item) => config.topic ? (item.topics ?? []).includes(config.topic) : true).sort(directed).slice(0, config.rows ?? 5);
-  const lines = filtered.map((item) => serialize2(item, config)).join("\n");
+  const lines = filtered.map((item) => serialize(item, config));
+  const output = style === "compact" ? lines.join("\n\n") : lines.join("\n");
+  info(`Generated ${filtered.length} repositories for widget "${widget.matched}" with style "${style}".`);
+  endGroup();
   if (style === "table") {
-    return `| | Repo | Stars | Lang | Description |
+    return config.showLanguage ? `| | Repo | Stars | Lang | Description |
 |---|---|---|---|---|
-${lines}`;
+${output}` : `| | Repo | Stars | Description |
+|---|---|---|---|
+${output}`;
   }
-  return lines;
+  return output;
 }
 
 // src/widgets/timestamp.ts
 var import_moment_timezone = __toESM(require_moment_timezone2());
 var DEFAULT_FORMAT = "MMM D YYYY, h:mm A";
-function resolveConfig(input) {
+function resolveConfig2(input) {
   return {
     format: input.format ?? DEFAULT_FORMAT,
     tz: input.tz ?? null,
@@ -36064,41 +36331,48 @@ function resolveConfig(input) {
 function getMoment(tz) {
   if (!tz) return import_moment_timezone.default.utc();
   if (import_moment_timezone.default.tz.zone(tz)) return (0, import_moment_timezone.default)().tz(tz);
+  warning(`Timestamp widget: unrecognized timezone "${tz}" \u2014 falling back to UTC.`);
   return import_moment_timezone.default.utc();
 }
-function makeBadge(label, value, color) {
-  return `![${label}](https://img.shields.io/badge/${encodeURIComponent(label)}-${encodeURIComponent(value)}-${color}?style=flat-square)`;
+function computeValue(now, mode, format) {
+  switch (mode) {
+    case "relative":
+      return now.fromNow();
+    case "unix":
+      return String(now.unix());
+    case "iso":
+      return now.toISOString();
+    default:
+      return now.format(format);
+  }
 }
-function safeBadgeValue(value) {
-  return value.replace(/:/g, "-").replace(/\./g, "").replace(/T/g, " ").replace(/Z/g, " UTC");
+function shieldsEncode(value) {
+  return encodeURIComponent(
+    value.replace(/-/g, "--").replace(/_/g, "__").replace(/\s+/g, "_")
+    // spaces → shields.io space character
+  );
+}
+function makeBadge(label, value, color) {
+  const encodedLabel = shieldsEncode(label);
+  const encodedValue = shieldsEncode(value);
+  return `![${label}](https://img.shields.io/badge/${encodedLabel}-${encodedValue}-${color}?style=flat-square)`;
 }
 function timestamp(widget) {
-  const config = resolveConfig(widget.config);
+  startGroup("Timestamp Widget");
+  const config = resolveConfig2(widget.config);
   const now = getMoment(config.tz);
-  let value;
-  switch (config.mode) {
-    case "relative":
-      value = now.fromNow();
-      break;
-    case "unix":
-      value = String(now.unix());
-      break;
-    case "iso":
-      value = now.toISOString();
-      break;
-    default:
-      value = now.format(config.format);
-  }
-  if (config.badge) {
-    return makeBadge(config.label, encodeURIComponent(safeBadgeValue(value)), config.color);
-  }
-  return value;
+  info(`Mode: ${config.mode} | TZ: ${config.tz ?? "UTC"} | Badge: ${config.badge}`);
+  const value = computeValue(now, config.mode, config.format);
+  info(`Computed value: ${value}`);
+  const output = config.badge ? makeBadge(config.label, value, config.color) : value;
+  endGroup();
+  return output;
 }
 
 // src/widgets/wakatime.ts
-function resolveConfig2(input) {
-  const apiKey = input.apiKey ?? process.env.INPUT_WAKATIME_KEY ?? "";
-  info(`Using WakaTime API Key: ${apiKey ? "***" + apiKey.slice(-4) : "None"}`);
+function resolveConfig3(input) {
+  const apiKey = input.apiKey || process.env.INPUT_WAKATIME_KEY;
+  info(`Using WakaTime API Key: ${apiKey ? "***" + apiKey.slice(-2) : "None"}`);
   return {
     apiKey,
     range: input.range ?? "last_7_days",
@@ -36148,7 +36422,7 @@ function renderSection(title, items, config) {
     return [
       header,
       ...items.map(
-        (i) => `\`${i.name}\` ${config.showTime ? formatTime(i.total_seconds) : ""} \`${progressBar(i.percent, 10)}\` ${config.showPercent ? i.percent.toFixed(1) + "%" : ""}`
+        (i) => `\`${i.name}\` ${config.showTime ? formatTime(i.total_seconds) : ""} \`${progressBar(i.percent, 10)}\` ${config.showPercent ? i.percent.toFixed(1) + "%\n" : "\n"}`
       )
     ].join("\n");
   }
@@ -36172,8 +36446,12 @@ function renderSection(title, items, config) {
   return out;
 }
 async function wakatime(widget) {
-  const config = resolveConfig2(widget.config);
+  startGroup("WakaTime Widgets");
+  const config = resolveConfig3(widget.config);
   if (!config.apiKey) {
+    warning(
+      "WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable."
+    );
     return `\u26A0\uFE0F Missing WakaTime API key`;
   }
   const encoded = Buffer.from(config.apiKey).toString("base64");
@@ -36181,6 +36459,7 @@ async function wakatime(widget) {
     headers: { Authorization: `Basic ${encoded}` }
   });
   if (!res.ok) {
+    error(`WakaTime API request failed with status ${res.status}: ${res.statusText}`);
     return `\u274C API Error ${res.status}`;
   }
   const json = await res.json();
@@ -36216,6 +36495,8 @@ async function wakatime(widget) {
   if (config.showProjects && data.projects?.length) {
     sections.push(renderSection("\u{1F4C1} Projects", data.projects.slice(0, config.rows), config));
   }
+  info(`WakaTime widget generated successfully with ${sections.length} sections.`);
+  endGroup();
   return sections.join("\n\n");
 }
 

@@ -1,6 +1,6 @@
 {
     "name": "profile-readme",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "description": "Collection of widgets for your profile README",
     "main": "lib/index.js",
     "repository": "https://github.com/ItzDabbzz/profile-readme.git",
@@ -17,7 +17,7 @@
         "build": "tsup",
         "check": "biome check",
         "check:fix": "biome check --fix",
-        "test": "jest",
+        "test": "bun test",
         "export": "bun check:fix && bun run build && git add dist/index.js"
     },
     "dependencies": {
