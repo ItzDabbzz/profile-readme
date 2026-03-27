@@ -1,6 +1,6 @@
+import * as core from '@actions/core';
 import moment from 'moment-timezone';
 import { Widget } from '../widget';
-import * as core from '@actions/core';
 
 /**
  * Configuration options for the timestamp widget.
@@ -145,7 +145,7 @@ export function timestamp(widget: Widget<TimestampConfig>): string {
     }
 
     if (config.badge) {
-        return makeBadge(config.label, encodeURIComponent(safeBadgeValue(value)), config.color);
+        return makeBadge(config.label, safeBadgeValue(value), config.color);
     }
 
     return value;
