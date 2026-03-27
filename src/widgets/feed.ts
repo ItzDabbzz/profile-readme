@@ -122,6 +122,15 @@ const feedCache = new Map<string, Parser.Output<Item>>();
  */
 const domainLastFetched = new Map<string, number>();
 
+/**
+ * Clears the module-level feed cache and domain throttle timestamps.
+ * Intended for use in tests only — do not call in production code.
+ */
+export function __resetFeedCache(): void {
+    feedCache.clear();
+    domainLastFetched.clear();
+}
+
 // ---------------------------------------------------------------------------
 // Config Resolution
 // ---------------------------------------------------------------------------
