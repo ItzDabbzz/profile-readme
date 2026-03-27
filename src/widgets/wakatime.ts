@@ -1,5 +1,5 @@
-import { Widget } from '../widget';
 import * as core from '@actions/core';
+import { Widget } from '../widget';
 
 /* =========================
    CONFIG (INPUT = OPTIONAL)
@@ -85,9 +85,9 @@ type ResolvedConfig = {
  * @returns Fully resolved configuration
  */
 function resolveConfig(input: WakaTimeConfig): ResolvedConfig {
-    const apiKey = input.apiKey || process.env.WAKATIME_KEY || '';
+    const apiKey = input.apiKey || (process.env.INPUT_WAKATIME_KEY as string);
 
-    core.info(`Using WakaTime API Key: ${apiKey ? '***' + apiKey.slice(-4) : 'None'}`);
+    core.info(`Using WakaTime API Key: ${apiKey ? '***' + apiKey.slice(-2) : 'None'}`);
 
     return {
         apiKey,
@@ -218,7 +218,7 @@ function renderSection(title: string, items: StatItem[], config: ResolvedConfig)
             header,
             ...items.map(
                 i =>
-                    `\`${i.name}\` ${config.showTime ? formatTime(i.total_seconds) : ''} \`${progressBar(i.percent, 10)}\` ${config.showPercent ? i.percent.toFixed(1) + '%' : ''}`
+                    `\`${i.name}\` ${config.showTime ? formatTime(i.total_seconds) : ''} \`${progressBar(i.percent, 10)}\` ${config.showPercent ? i.percent.toFixed(1) + '%\n' : '\n'}`
             )
         ].join('\n');
     }
@@ -275,10 +275,13 @@ function renderSection(title: string, items: StatItem[], config: ResolvedConfig)
  * ```
  */
 export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> {
+    core.startGroup('WakaTime Widgets');
     const config = resolveConfig(widget.config);
 
     if (!config.apiKey) {
-        core.warning('WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable.');
+        core.warning(
+            'WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable.'
+        );
         return `⚠️ Missing WakaTime API key`;
     }
 
@@ -338,5 +341,6 @@ export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> 
     }
 
     core.info(`WakaTime widget generated successfully with ${sections.length} sections.`);
+    core.endGroup();
     return sections.join('\n\n');
 }
