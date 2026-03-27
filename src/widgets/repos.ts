@@ -1,6 +1,7 @@
+import * as core from '@actions/core';
 import moment from 'moment';
 import { Widget } from '../widget';
-import * as core from '@actions/core';
+import { writeTempJson } from '../helpers';
 
 /**
  * Configuration options for the repositories widget.
@@ -75,7 +76,8 @@ const LANGUAGE_COLOR: Record<string, string> = {
     Dart: '00B4AB',
     Elixir: '6e4a7e',
     Zig: 'ec915c',
-    Haskell: '5e5086'
+    Haskell: '5e5086',
+    'N/A': '000000'
 };
 
 /**
@@ -101,7 +103,8 @@ const LANGUAGE_EMOJI: Record<string, string> = {
     Dart: '🎯',
     Elixir: '💧',
     Zig: '⚡',
-    Haskell: 'λ'
+    Haskell: 'λ',
+    'N/A': "❌"
 };
 
 /**
@@ -113,7 +116,7 @@ const comparators: Record<string, (a: any, b: any) => number> = {
     created: (a, b) => moment(b.created_at).diff(moment(a.created_at)),
     updated: (a, b) => moment(b.updated_at).diff(moment(a.updated_at)),
     pushed: (a, b) => moment(b.pushed_at).diff(moment(a.pushed_at)),
-    full_name: (a, b) => a.full_name.localeCompare(b.full_name),
+    full_name: (a, b) => b.full_name.localeCompare(a.full_name),
     size: (a, b) => b.size - a.size
 };
 
@@ -138,8 +141,8 @@ function forksBadge(item: any): string {
  * @returns Markdown badge string or empty if no language
  */
 function languageBadge(item: any): string {
-    const lang = item.language;
-    if (!lang) return '';
+    var lang = item.language;
+    if (!lang) lang = 'N/A';
     const color = LANGUAGE_COLOR[lang] ?? '555';
     return `![${lang}](https://img.shields.io/badge/${encodeURIComponent(lang)}-${color}?style=flat-square)`;
 }
@@ -151,8 +154,8 @@ function languageBadge(item: any): string {
  * @returns Language string (e.g., "🐍 `Python`")
  */
 function languageText(item: any): string {
-    const lang = item.language;
-    if (!lang) return '';
+    var lang = item.language;
+    if (!lang) lang = 'N/A';
     const emoji = LANGUAGE_EMOJI[lang] ?? '💻';
     return `${emoji} \`${lang}\``;
 }
@@ -185,7 +188,7 @@ function serialize(item: any, config: Partial<ReposConfig>): string {
         const stars = showStars ? ` ⭐ ${item.stargazers_count}` : '';
         const forks = showForks ? ` 🍴 ${item.forks_count}` : '';
         const lang = showLang && item.language ? ` [${item.language}]` : '';
-        return `📦 ${item.full_name}${stars}${forks}${lang}${archived}${desc ? ` — ${desc}` : ''}`;
+        return `📦 ${item.full_name}${stars}${forks}${lang}${archived}${desc ? ` — ${desc}\n` : '\n'}`;
     }
 
     if (style === 'list') {
@@ -203,8 +206,11 @@ function serialize(item: any, config: Partial<ReposConfig>): string {
     const forksCell = showForks ? (showBadges ? forksBadge(item) : `🍴 \`${item.forks_count}\``) : '';
     const langCell = showLang ? (showBadges ? languageBadge(item) : languageText(item)) : '';
     const descCell = desc;
-
-    return `| 📦 | ${repoCell} | ${starsCell}${forksCell} | ${langCell} | ${descCell} |`;
+    if (config.showLanguage) {
+        return `| 📦 | ${repoCell} | ${starsCell}${forksCell} | ${langCell} | ${descCell} |`;
+    }else {
+        return `| 📦 | ${repoCell} | ${starsCell}${forksCell} | ${descCell} |`;
+    }
 }
 
 /**
@@ -230,6 +236,7 @@ function serialize(item: any, config: Partial<ReposConfig>): string {
  * 5. Sort and limit results
  */
 export function repos(repositories: any, widget: Widget<ReposConfig>): string {
+    core.startGroup('Repo Widgets');
     const config = widget.config;
     const sortKey = config.sort ?? 'stars';
     const order = config.order ?? 'desc';
@@ -239,6 +246,7 @@ export function repos(repositories: any, widget: Widget<ReposConfig>): string {
     const comparator = comparators[sortKey] ?? comparators.stars;
     const directed = order === 'asc' ? (a: any, b: any) => -comparator(a, b) : comparator;
 
+    // add alphabetical sort by full_name
     const filtered = (repositories.data as any[])
         .filter(item => !item.private)
         .filter(item => !exclude.includes(item.full_name))
@@ -251,10 +259,12 @@ export function repos(repositories: any, widget: Widget<ReposConfig>): string {
 
     const lines = filtered.map(item => serialize(item, config)).join('\n');
 
-    if (style === 'table') {
-        return `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${lines}`;
-    }
-
     core.info(`Generated ${filtered.length} repositories for widget "${widget.matched}" with style "${style}".`);
+    core.endGroup();
+    if (style === 'table') {
+        return config.showLanguage
+            ? `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${lines}`
+            : `| | Repo | Stars | Description |\n|---|---|---|---|\n${lines}`;
+    }
     return lines;
 }
