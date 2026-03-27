@@ -1,6 +1,7 @@
 import * as core from '@actions/core';
 import moment from 'moment';
 import { Widget } from '../widget';
+import { capitalize } from '../helpers';
 
 /**
  * Configuration options for the activity widget.
@@ -38,31 +39,44 @@ export interface ActivityConfig {
     style: 'table' | 'list' | 'compact';
 }
 
-/**
- * Mapping of GitHub event types to badge metadata.
- */
-const EVENT_BADGE: Record<string, { label: string; color: string; emoji: string }> = {
-    PushEvent: { label: 'push', color: '4c9be8', emoji: '⬆️' },
-    PullRequestEvent: { label: 'PR', color: 'a371f7', emoji: '🔀' },
-    PullRequestReviewEvent: { label: 'review', color: 'f0883e', emoji: '👀' },
-    PullRequestReviewCommentEvent: { label: 'review', color: 'f0883e', emoji: '💬' },
-    IssuesEvent: { label: 'issue', color: 'e4e669', emoji: '❗' },
-    IssueCommentEvent: { label: 'comment', color: '79c0ff', emoji: '🗣' },
-    ForkEvent: { label: 'fork', color: '56d364', emoji: '🍴' },
-    ReleaseEvent: { label: 'release', color: '3fb950', emoji: '🚀' },
-    WatchEvent: { label: 'star', color: 'e3b341', emoji: '⭐' },
-    CreateEvent: { label: 'create', color: '58a6ff', emoji: '🌿' },
-    DeleteEvent: { label: 'delete', color: 'f85149', emoji: '🗑' },
-    PublicEvent: { label: 'public', color: '3fb950', emoji: '🎉' },
-    MemberEvent: { label: 'member', color: 'a371f7', emoji: '👥' },
-    SponsorshipEvent: { label: 'sponsor', color: 'db61a2', emoji: '💖' }
-};
+// ---------------------------------------------------------------------------
+// Event Badge Map
+// ---------------------------------------------------------------------------
 
 /**
- * Builds a shields.io badge for a GitHub event type.
+ * Mapping of all supported GitHub event types to badge display metadata.
  *
- * @param type - GitHub event type
- * @returns Markdown image string or empty string if unsupported
+ * @see https://docs.github.com/en/rest/using-the-rest-api/github-event-types
+ */
+const EVENT_BADGE: Record<string, { label: string; color: string; emoji: string }> = {
+    CommitCommentEvent:              { label: 'comment',  color: '79c0ff', emoji: '💬' },
+    CreateEvent:                     { label: 'create',   color: '58a6ff', emoji: '🌿' },
+    DeleteEvent:                     { label: 'delete',   color: 'f85149', emoji: '🗑️' },
+    ForkEvent:                       { label: 'fork',     color: '56d364', emoji: '🍴' },
+    GollumEvent:                     { label: 'wiki',     color: '8b949e', emoji: '📖' },
+    IssueCommentEvent:               { label: 'comment',  color: '79c0ff', emoji: '🗣️' },
+    IssuesEvent:                     { label: 'issue',    color: 'e4e669', emoji: '❗' },
+    MemberEvent:                     { label: 'member',   color: 'a371f7', emoji: '👥' },
+    PublicEvent:                     { label: 'public',   color: '3fb950', emoji: '🎉' },
+    PullRequestEvent:                { label: 'PR',       color: 'a371f7', emoji: '🔀' },
+    PullRequestReviewEvent:          { label: 'review',   color: 'f0883e', emoji: '👀' },
+    PullRequestReviewCommentEvent:   { label: 'review',   color: 'f0883e', emoji: '💬' },
+    PullRequestReviewThreadEvent:    { label: 'thread',   color: 'f0883e', emoji: '🧵' },
+    PushEvent:                       { label: 'push',     color: '4c9be8', emoji: '⬆️' },
+    ReleaseEvent:                    { label: 'release',  color: '3fb950', emoji: '🚀' },
+    SponsorshipEvent:                { label: 'sponsor',  color: 'db61a2', emoji: '💖' },
+    WatchEvent:                      { label: 'star',     color: 'e3b341', emoji: '⭐' },
+};
+
+// ---------------------------------------------------------------------------
+// Badge & Date Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds a shields.io flat-square badge for a GitHub event type.
+ *
+ * @param type - GitHub event type string (e.g. `"PushEvent"`)
+ * @returns Markdown image string, or empty string if the event type is unsupported
  */
 function badge(type: string): string {
     const b = EVENT_BADGE[type];
@@ -71,11 +85,15 @@ function badge(type: string): string {
 }
 
 /**
- * Formats a date based on widget configuration.
+ * Formats an ISO date string based on widget configuration.
  *
- * @param date - ISO date string
- * @param config - Partial widget config
- * @returns Formatted date string or empty string if disabled
+ * - If `showDate` is false → returns empty string
+ * - If `dateFormat` is `"relative"` or unset → returns relative time (e.g. "2 hours ago")
+ * - Otherwise → formats using the provided moment.js format string
+ *
+ * @param date - ISO 8601 date string from the GitHub API
+ * @param config - Partial widget configuration
+ * @returns Formatted date string, or empty string if dates are disabled
  */
 function formatDate(date: string, config: Partial<ActivityConfig>): string {
     if (!config.showDate) return '';
@@ -85,80 +103,245 @@ function formatDate(date: string, config: Partial<ActivityConfig>): string {
     return moment(date).fromNow();
 }
 
-/**
- * Builds a repository display string.
- */
-function repoLink(repoName: string): string {
-    return `**[${repoName}](https://github.com/${repoName})**`;
-}
+// ---------------------------------------------------------------------------
+// Link Builders
+// ---------------------------------------------------------------------------
 
 /**
- * Builds an issue link or plain reference.
- */
-function issueLink(repoName: string, num: number): string {
-    return `[#${num}](https://github.com/${repoName}/issues/${num})`;
-}
-
-/**
- * Builds a pull request link or plain reference.
- */
-function prLink(repoName: string, num: number): string {
-    return `[#${num}](https://github.com/${repoName}/pull/${num})`;
-}
-
-/**
- * Builds a release link or plain label.
- */
-function releaseLink(repoName: string, tag: string, name: string): string {
-    const label = name || tag;
-    return `[\`${label}\`](https://github.com/${repoName}/releases/tag/${tag})`;
-}
-
-/**
+ * Renders a repository name as a bold GitHub link.
  *
- * @param event Github Event
- * @returns Generated readable string
+ * @param repoName - Full repository name (e.g. `"owner/repo"`)
+ * @returns Markdown bold link string
  */
-function describeEvent(event: any): string {
-    const repo = event.repo.name;
+function repoLink(repoName: string, links: boolean): string {
+    return links ? `**[${repoName}](https://github.com/${repoName})**` : `**${repoName}**`;
+}
+
+
+/**
+ * Renders an issue number as a GitHub issue link.
+ *
+ * @param repoName - Full repository name
+ * @param num - Issue number
+ * @returns Markdown link string (e.g. `[#42](https://github.com/owner/repo/issues/42)`)
+ */
+function issueLink(repoName: string, num: number, links: boolean): string {
+    return links ? `[#${num}](https://github.com/${repoName}/issues/${num})` : `#${num}`;
+}
+
+/**
+ * Renders a pull request number as a GitHub PR link.
+ *
+ * @param repoName - Full repository name
+ * @param num - Pull request number
+ * @returns Markdown link string (e.g. `[#7](https://github.com/owner/repo/pull/7)`)
+ */
+function prLink(repoName: string, num: number, links: boolean): string {
+    return links ? `[#${num}](https://github.com/${repoName}/pull/${num})` : `#${num}`;
+}
+
+/**
+ * Renders a release tag as a GitHub release link.
+ *
+ * @param repoName - Full repository name
+ * @param tag - Release tag name (e.g. `"v1.2.0"`)
+ * @param name - Release display name (falls back to `tag` if empty)
+ * @returns Markdown inline-code link string
+ */
+function releaseLink(repoName: string, tag: string, name: string, links: boolean): string {
+    const label = name || tag;
+    return links ? `[\`${label}\`](https://github.com/${repoName}/releases/tag/${encodeURIComponent(tag)})` : `\`${label}\``;
+}
+
+/**
+ * Renders a commit SHA as a GitHub commit link (short 7-char SHA).
+ *
+ * @param repoName - Full repository name
+ * @param sha - Full or short commit SHA
+ * @returns Markdown inline-code link string
+ */
+function commitLink(repoName: string, sha: string, links: boolean): string {
+    const short = sha.slice(0, 7);
+    return links ? `[\`${short}\`](https://github.com/${repoName}/commit/${sha})` : `\`${short}\``;
+}
+
+/**
+ * Renders a branch or tag ref name as a GitHub tree link.
+ *
+ * Strips the `"refs/heads/"` prefix from push event refs.
+ *
+ * @param repoName - Full repository name
+ * @param ref - Full git ref string (e.g. `"refs/heads/main"`)
+ * @returns Markdown inline-code link string
+ */
+function refLink(repoName: string, ref: string, links: boolean): string {
+    const name = ref.replace(/^refs\/heads\//, '');
+    return links ? `[\`${name}\`](https://github.com/${repoName}/tree/${encodeURIComponent(name)})` : `\`${name}\``;
+}
+
+/**
+ * Renders a wiki page name as a GitHub wiki link.
+ *
+ * @param repoName - Full repository name
+ * @param pageTitle - Wiki page title
+ * @returns Markdown link string
+ */
+function wikiLink(repoName: string, pageTitle: string, links: boolean): string {
+    const slug = pageTitle.replace(/\s+/g, '-');
+    return links ? `[${pageTitle}](https://github.com/${repoName}/wiki/${encodeURIComponent(slug)})` : pageTitle;
+}
+
+// ---------------------------------------------------------------------------
+// Event Description
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates a human-readable description for a GitHub API event object.
+ *
+ * Covers all event types documented in the GitHub REST API:
+ * @see https://docs.github.com/en/rest/using-the-rest-api/github-event-types
+ *
+ * Supported event types and example output:
+ * - `CommitCommentEvent`            → "Commented on commit `abc1234` in **owner/repo**"
+ * - `CreateEvent` (repository)      → "Created repository **owner/repo**"
+ * - `CreateEvent` (branch/tag)      → "Created branch `main` in **owner/repo**"
+ * - `DeleteEvent`                   → "Deleted branch `old-branch` in **owner/repo**"
+ * - `ForkEvent`                     → "Forked **owner/repo** from **source/repo**"
+ * - `GollumEvent`                   → "Edited wiki page Home in **owner/repo**" (or "Created")
+ * - `IssueCommentEvent`             → "Commented on issue #12 in **owner/repo**"
+ * - `IssuesEvent`                   → "Opened issue #12 in **owner/repo**"
+ * - `MemberEvent`                   → "Added @username as collaborator to **owner/repo**"
+ * - `PublicEvent`                   → "Made **owner/repo** public"
+ * - `PullRequestEvent`              → "Opened PR #7 in **owner/repo**"
+ * - `PullRequestReviewEvent`        → "Approved PR #7 in **owner/repo**"
+ * - `PullRequestReviewCommentEvent` → "Commented on PR #7 review in **owner/repo**"
+ * - `PullRequestReviewThreadEvent`  → "Resolved a review thread on PR #7 in **owner/repo**"
+ * - `PushEvent`                     → "Pushed 3 commits to `main` in **owner/repo**"
+ * - `ReleaseEvent`                  → "Published release `v1.2.0` in **owner/repo**"
+ * - `SponsorshipEvent`              → "Started sponsoring @username"
+ * - `WatchEvent`                    → "Starred **owner/repo**"
+ *
+ * Falls back to a generic description for any unrecognised event type.
+ *
+ * @param event - Raw GitHub event object from the Events API response
+ * @returns Human-readable Markdown string describing the event
+ */
+function describeEvent(event: any, config: Partial<ActivityConfig>): string {
+    const repo = event.repo?.name ?? 'unknown/unknown';
+    const payload = event.payload ?? {};
+    const links = config.showLinks ?? true;
 
     switch (event.type) {
-        case 'PushEvent': {
-            const count = event.payload?.size ?? 0;
-            const label = count === 1 ? 'commit' : 'commits';
-            return `Pushed ${count} ${label}`;
+        case 'CommitCommentEvent': {
+            const sha = payload.comment?.commit_id ?? '';
+            return sha
+                ? `Commented on commit ${commitLink(repo, sha, links)} in ${repoLink(repo, links)}`
+                : `Commented on a commit in ${repoLink(repo, links)}`;
         }
-
-        case 'PullRequestEvent': {
-            const pr = event.payload.pull_request;
-            const action = event.payload.action;
-            return `${action} PR #${pr.number}}`;
+        case 'CreateEvent': {
+            const refType: string = payload.ref_type ?? 'repository';
+            const ref: string = payload.ref ?? '';
+            if (refType === 'repository') return `Created repository ${repoLink(repo, links)}`;
+            return `Created ${refType} ${refLink(repo, ref, links)} in ${repoLink(repo, links)}`;
         }
-
-        case 'IssuesEvent': {
-            const issue = event.payload.issue;
-            return `${event.payload.action} issue #${issue.number}`;
+        case 'DeleteEvent': {
+            const refType: string = payload.ref_type ?? 'branch';
+            const ref: string = payload.ref ?? '';
+            return `Deleted ${refType} \`${ref}\` in ${repoLink(repo, links)}`;
         }
-
-        case 'IssueCommentEvent': {
-            return `Commented on #${event.payload.issue.number}`;
-        }
-
         case 'ForkEvent': {
-            return `Forked ${repoLink(event.payload.forkee.full_name)}`;
+            const forkee = payload.forkee?.full_name ?? repo;
+            return `Forked ${repoLink(repo, links)} → ${repoLink(forkee, links)}`;
         }
-
+        case 'GollumEvent': {
+            const pages: any[] = payload.pages ?? [];
+            if (pages.length === 0) return `Updated wiki in ${repoLink(repo, links)}`;
+            const first = pages[0];
+            const action = first.action === 'created' ? 'Created' : 'Edited';
+            const pageTitle: string = first.title ?? first.page_name ?? 'a page';
+            const suffix = pages.length > 1 ? ` (+${pages.length - 1} more)` : '';
+            return `${action} wiki page ${wikiLink(repo, pageTitle, links)}${suffix} in ${repoLink(repo, links)}`;
+        }
+        case 'IssueCommentEvent': {
+            const num: number = payload.issue?.number;
+            const isPr = !!payload.issue?.pull_request;
+            const target = isPr ? prLink(repo, num, links) : issueLink(repo, num, links);
+            const kind = isPr ? 'PR' : 'issue';
+            return `Commented on ${kind} ${target} in ${repoLink(repo, links)}`;
+        }
+        case 'IssuesEvent': {
+            const action: string = payload.action ?? 'updated';
+            const num: number = payload.issue?.number;
+            const title: string = payload.issue?.title ?? '';
+            const link = issueLink(repo, num, links);
+            const titleStr = title ? ` — _${title}_` : '';
+            return `${capitalize(action)} issue ${link}${titleStr} in ${repoLink(repo, links)}`;
+        }
+        case 'MemberEvent': {
+            const action: string = payload.action ?? 'added';
+            const login: string = payload.member?.login ?? 'someone';
+            return `${capitalize(action)} @${login} as collaborator to ${repoLink(repo, links)}`;
+        }
+        case 'PublicEvent': {
+            return `Made ${repoLink(repo, links)} public`;
+        }
+        case 'PullRequestEvent': {
+            const action: string = payload.action ?? 'updated';
+            const pr = payload.pull_request;
+            const num: number = pr?.number;
+            const merged: boolean = pr?.merged ?? false;
+            const displayAction = action === 'closed' && merged ? 'merged' : action;
+            const title: string = pr?.title ?? '';
+            const titleStr = title ? ` — _${title}_` : '';
+            return `${capitalize(displayAction)} PR ${prLink(repo, num, links)}${titleStr} in ${repoLink(repo, links)}`;
+        }
+        case 'PullRequestReviewEvent': {
+            const state: string = payload.review?.state ?? 'reviewed';
+            const num: number = payload.pull_request?.number;
+            const stateLabel: Record<string, string> = {
+                approved: 'Approved',
+                changes_requested: 'Requested changes on',
+                commented: 'Commented on',
+                dismissed: 'Dismissed review on',
+            };
+            const verb = stateLabel[state] ?? 'Reviewed';
+            return `${verb} PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
+        }
+        case 'PullRequestReviewCommentEvent': {
+            const num: number = payload.pull_request?.number;
+            return `Commented on a review of PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
+        }
+        case 'PullRequestReviewThreadEvent': {
+            const action: string = payload.action ?? 'resolved';
+            const num: number = payload.pull_request?.number;
+            return `${capitalize(action)} a review thread on PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
+        }
+        case 'PushEvent': {
+            const count: number = payload.size ?? payload.commits?.length ?? 0;
+            const ref: string = payload.ref ?? '';
+            const label = count === 1 ? 'commit' : 'commits';
+            const branch = refLink(repo, ref, links);
+            const head: string = payload.head ?? '';
+            const headStr = head ? ` (${commitLink(repo, head, links)})` : '';
+            return `Pushed ${count} ${label} to ${branch} in ${repoLink(repo, links)}${headStr}`;
+        }
         case 'ReleaseEvent': {
-            const r = event.payload;
-            return `Released ${releaseLink(event.repo.name, r.release.tag_name, r.release.name)}`;
+            const action: string = payload.action ?? 'published';
+            const tag: string = payload.release?.tag_name ?? '';
+            const name: string = payload.release?.name ?? '';
+            return `${capitalize(action)} release ${releaseLink(repo, tag, name, links)} in ${repoLink(repo, links)}`;
         }
-
+        case 'SponsorshipEvent': {
+            const action: string = payload.action ?? 'started';
+            const login: string = payload.sponsorship?.sponsorable?.login ?? 'someone';
+            const verb = action === 'cancelled' ? 'Cancelled sponsorship of' : 'Started sponsoring';
+            return `${verb} @${login}`;
+        }
         case 'WatchEvent': {
-            return `Starred ${repoLink(repo)}`;
+            return `Starred ${repoLink(repo, links)}`;
         }
-
         default:
-            return `${event.type} in ${repoLink(repo)}`;
+            return `${event.type?.replace(/Event$/, '') ?? 'Unknown activity'} in ${repoLink(repo, links)}`;
     }
 }
 
@@ -171,7 +354,7 @@ function build(event: any, config: Partial<ActivityConfig>) {
     return {
         emoji: b.emoji,
         badge: badge(event.type),
-        description: describeEvent(event),
+        description: describeEvent(event, config),
         repo: event.repo.name,
         date: formatDate(event.created_at, config)
     };
@@ -184,7 +367,7 @@ function build(event: any, config: Partial<ActivityConfig>) {
 /**
  * Renders events as a markdown table.
  */
-function renderTable(events: any[], showDate: boolean): string {
+function renderTable(events: any[], showDate: boolean, showLinks: boolean): string {
     const dateHeader = showDate ? ' When |' : '';
     const dateSep = showDate ? ':---|' : '';
 
@@ -192,7 +375,7 @@ function renderTable(events: any[], showDate: boolean): string {
 
     for (const e of events) {
         const date = showDate ? ` \`${e.date || '—'}\` |` : '';
-        out += `| ${e.badge} | ${e.emoji} ${e.description} | ${repoLink(e.repo)} |${date}\n`;
+        out += `| ${e.badge} | ${e.emoji} ${e.description} | ${repoLink(e.repo, showLinks)} |${date}\n`;
     }
 
     return out.trim();
@@ -271,7 +454,7 @@ export function activity(events: any, widget: Widget<ActivityConfig>): string {
                         ? renderList(items, showDate)
                         : style === 'compact'
                           ? renderCompact(items, showDate)
-                          : renderTable(items, showDate);
+                          : renderTable(items, showDate, config.showLinks as boolean);
 
                 return `${header}\n${body}`;
             })
@@ -283,5 +466,5 @@ export function activity(events: any, widget: Widget<ActivityConfig>): string {
 
     core.info(`Rendering activity with ${built.length} events`);
     core.endGroup();
-    return renderTable(built, showDate);
+    return renderTable(built, showDate, config.showLinks as boolean);
 }
