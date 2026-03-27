@@ -163,14 +163,15 @@ function languageText(item: any): string {
  * Serializes a repository into a markdown row/line based on configuration.
  *
  * Handles all output styles:
- * - "table"
- * - "list"
- * - "compact"
- * - raw mode overrides styling
+ * - `"table"`   → Markdown table row with emoji, link, stars/forks, and description columns
+ * - `"list"`    → Bullet list entry with optional badges and blockquote description
+ * - `"compact"` → Single-line plaintext summary (also used when `raw` is true)
  *
- * @param item - Repository object
- * @param config - Partial widget configuration
- * @returns Markdown string representation of the repo
+ * Raw mode overrides `style` and always produces compact output.
+ *
+ * @param item - GitHub repository object from the API response
+ * @param config - Partial widget configuration (defaults applied internally)
+ * @returns Markdown string for a single repository — no trailing newline
  */
 function serialize(item: any, config: Partial<ReposConfig>): string {
     const raw = config.raw ?? false;
@@ -181,13 +182,15 @@ function serialize(item: any, config: Partial<ReposConfig>): string {
     const showBadges = config.showBadges ?? true;
     const style = config.style ?? 'table';
     const archived = item.archived ? (raw ? ' [archived]' : ' _(archived)_') : '';
-    const desc = showDesc && item.description && item.description !== 'null' ? item.description : '';
+    const desc = showDesc && item.description && item.description !== 'null' ? '`' + item.description + '`' : '';
 
     if (raw || style === 'compact') {
         const stars = showStars ? ` ⭐ ${item.stargazers_count}` : '';
         const forks = showForks ? ` 🍴 ${item.forks_count}` : '';
         const lang = showLang && item.language ? ` [${item.language}]` : '';
-        return `📦 ${item.full_name}${stars}${forks}${lang}${archived}${desc ? ` — ${desc}\n` : '\n'}`;
+        const descStr = desc ? ` — ${desc}` : '';
+        // No trailing \n — repos() joins lines with \n itself
+        return `📦 ${item.full_name}${stars}${forks}${lang}${archived}${descStr}`;
     }
 
     if (style === 'list') {
@@ -207,32 +210,32 @@ function serialize(item: any, config: Partial<ReposConfig>): string {
     const descCell = desc;
     if (config.showLanguage) {
         return `| 📦 | ${repoCell} | ${starsCell}${forksCell} | ${langCell} | ${descCell} |`;
-    }else {
+    } else {
         return `| 📦 | ${repoCell} | ${starsCell}${forksCell} | ${descCell} |`;
     }
 }
 
 /**
- * Renders a GitHub repositories widget.
+ * Renders a GitHub repositories widget as a Markdown string.
  *
- * Features:
- * - Sorting (stars, forks, dates, etc.)
- * - Filtering (topics, stars, forks, archived)
- * - Multiple display styles (table, list, compact)
- * - Optional badge-based UI
+ * ## Filtering pipeline (applied in order)
+ * 1. Remove private repositories
+ * 2. Remove entries matching the `exclude` list
+ * 3. Remove archived repos (unless `showArchived` is true)
+ * 4. Remove forked repos (unless `showForks_repos` is true)
+ * 5. Apply `minStars` threshold
+ * 6. Apply `topic` filter
+ * 7. Sort by `sort` field in `order` direction
+ * 8. Slice to `rows`
  *
- * @param repositories - GitHub API response containing repository data
- * @param widget - Widget instance with configuration
+ * ## Output styles
+ * - `"table"`   → Markdown table with header row (default)
+ * - `"list"`    → Bullet list with optional badges
+ * - `"compact"` → Plain single-line entries (also forced when `raw` is true)
  *
- * @returns Markdown string representing repositories
- *
- * @remarks
- * Filtering pipeline:
- * 1. Remove private repos
- * 2. Apply exclude list
- * 3. Filter archived/forks based on config
- * 4. Apply minStars + topic filter
- * 5. Sort and limit results
+ * @param repositories - GitHub API response object with a `data` array of repo objects
+ * @param widget - Widget instance containing {@link ReposConfig} configuration
+ * @returns Rendered Markdown string
  */
 export function repos(repositories: any, widget: Widget<ReposConfig>): string {
     core.startGroup('Repo Widgets');
@@ -245,7 +248,6 @@ export function repos(repositories: any, widget: Widget<ReposConfig>): string {
     const comparator = comparators[sortKey] ?? comparators.stars;
     const directed = order === 'asc' ? (a: any, b: any) => -comparator(a, b) : comparator;
 
-    // add alphabetical sort by full_name
     const filtered = (repositories.data as any[])
         .filter(item => !item.private)
         .filter(item => !exclude.includes(item.full_name))
@@ -256,14 +258,19 @@ export function repos(repositories: any, widget: Widget<ReposConfig>): string {
         .sort(directed)
         .slice(0, config.rows ?? 5);
 
-    const lines = filtered.map(item => serialize(item, config)).join('\n');
+    const lines = filtered.map(item => serialize(item, config));
+    const output = (style === 'compact')
+        ? lines.join('\n\n')  // blank line between compact items
+        : lines.join('\n');   // single newline for table rows / list items
 
     core.info(`Generated ${filtered.length} repositories for widget "${widget.matched}" with style "${style}".`);
     core.endGroup();
+
     if (style === 'table') {
         return config.showLanguage
-            ? `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${lines}`
-            : `| | Repo | Stars | Description |\n|---|---|---|---|\n${lines}`;
+            ? `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${output}`
+            : `| | Repo | Stars | Description |\n|---|---|---|---|\n${output}`;
     }
-    return lines;
+
+    return output;
 }
