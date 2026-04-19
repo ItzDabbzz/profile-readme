@@ -86,8 +86,7 @@ type ResolvedConfig = {
  */
 function resolveConfig(input: WakaTimeConfig): ResolvedConfig {
     const apiKey = input.apiKey || (process.env.INPUT_WAKATIME_KEY as string);
-
-    core.info(`Using WakaTime API Key: ${apiKey ? '***' + apiKey.slice(-2) : 'None'}`);
+    if (apiKey) core.setSecret(apiKey);
 
     return {
         apiKey,
@@ -276,71 +275,81 @@ function renderSection(title: string, items: StatItem[], config: ResolvedConfig)
  */
 export async function wakatime(widget: Widget<WakaTimeConfig>): Promise<string> {
     core.startGroup('WakaTime Widgets');
-    const config = resolveConfig(widget.config);
+    try {
+        const config = resolveConfig(widget.config);
 
-    if (!config.apiKey) {
-        core.warning(
-            'WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable.'
-        );
-        return `⚠️ Missing WakaTime API key`;
-    }
+        if (!config.apiKey) {
+            core.warning(
+                'WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable.'
+            );
+            return `⚠️ Missing WakaTime API key`;
+        }
 
-    const encoded = Buffer.from(config.apiKey).toString('base64');
+        const encoded = Buffer.from(config.apiKey).toString('base64');
 
-    const res = await fetch(`https://wakatime.com/api/v1/users/current/stats/${config.range}`, {
-        headers: { Authorization: `Basic ${encoded}` }
-    });
+        let res: Response;
+        try {
+            res = await fetch(`https://wakatime.com/api/v1/users/current/stats/${config.range}`, {
+                headers: { Authorization: `Basic ${encoded}` }
+            });
+        } catch (error: any) {
+            const message = error instanceof Error ? error.message : String(error);
+            core.error(`WakaTime request failed before response: ${message}`);
+            return `⚠️ Could not load WakaTime stats: ${message}`;
+        }
 
-    if (!res.ok) {
-        core.error(`WakaTime API request failed with status ${res.status}: ${res.statusText}`);
-        return `❌ API Error ${res.status}`;
-    }
+        if (!res.ok) {
+            core.error(`WakaTime API request failed with status ${res.status}: ${res.statusText}`);
+            return `❌ API Error ${res.status}`;
+        }
 
-    const json = (await res.json()) as any;
-    const data = json.data;
+        const json = (await res.json()) as any;
+        const data = json.data;
 
-    const sections: string[] = [];
+        const sections: string[] = [];
 
-    /* HEADER */
-    sections.push(
-        `## ⏱ WakaTime Stats\n> ${RANGE_LABEL[config.range]} · **${data.human_readable_total}** · 🌍 ${data.timezone}`
-    );
-
-    /* SUMMARY */
-    if (config.showSummary) {
+        /* HEADER */
         sections.push(
-            [
-                badge('Total', data.human_readable_total),
-                badge('Languages', String(data.languages?.length ?? 0)),
-                badge('Editors', String(data.editors?.length ?? 0))
-            ].join(' ')
+            `## ⏱ WakaTime Stats\n> ${RANGE_LABEL[config.range]} · **${data.human_readable_total}** · 🌍 ${data.timezone}`
         );
-    }
 
-    /* HIGHLIGHTS */
-    if (config.showHighlights && data.languages?.length) {
-        const top = data.languages[0];
-        sections.push(`## 🏆 Highlights\n- Top Language: **${top.name}** (${top.percent.toFixed(1)}%)`);
-    }
+        /* SUMMARY */
+        if (config.showSummary) {
+            sections.push(
+                [
+                    badge('Total', data.human_readable_total),
+                    badge('Languages', String(data.languages?.length ?? 0)),
+                    badge('Editors', String(data.editors?.length ?? 0))
+                ].join(' ')
+            );
+        }
 
-    /* SECTIONS */
-    if (config.showLanguages && data.languages?.length) {
-        sections.push(renderSection('💬 Languages', data.languages.slice(0, config.rows), config));
-    }
+        /* HIGHLIGHTS */
+        if (config.showHighlights && data.languages?.length) {
+            const top = data.languages[0];
+            sections.push(`## 🏆 Highlights\n- Top Language: **${top.name}** (${top.percent.toFixed(1)}%)`);
+        }
 
-    if (config.showEditors && data.editors?.length) {
-        sections.push(renderSection('🔥 Editors', data.editors.slice(0, config.rows), config));
-    }
+        /* SECTIONS */
+        if (config.showLanguages && data.languages?.length) {
+            sections.push(renderSection('💬 Languages', data.languages.slice(0, config.rows), config));
+        }
 
-    if (config.showOS && data.operating_systems?.length) {
-        sections.push(renderSection('🖥 OS', data.operating_systems.slice(0, config.rows), config));
-    }
+        if (config.showEditors && data.editors?.length) {
+            sections.push(renderSection('🔥 Editors', data.editors.slice(0, config.rows), config));
+        }
 
-    if (config.showProjects && data.projects?.length) {
-        sections.push(renderSection('📁 Projects', data.projects.slice(0, config.rows), config));
-    }
+        if (config.showOS && data.operating_systems?.length) {
+            sections.push(renderSection('🖥 OS', data.operating_systems.slice(0, config.rows), config));
+        }
 
-    core.info(`WakaTime widget generated successfully with ${sections.length} sections.`);
-    core.endGroup();
-    return sections.join('\n\n');
+        if (config.showProjects && data.projects?.length) {
+            sections.push(renderSection('📁 Projects', data.projects.slice(0, config.rows), config));
+        }
+
+        core.info(`WakaTime widget generated successfully with ${sections.length} sections.`);
+        return sections.join('\n\n');
+    } finally {
+        core.endGroup();
+    }
 }
