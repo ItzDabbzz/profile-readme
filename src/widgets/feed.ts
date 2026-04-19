@@ -150,7 +150,7 @@ function resolveConfig(input: FeedConfig): ResolvedFeedConfig {
         title: input.title ?? false,
         retries: input.retries ?? 3,
         retryDelay: input.retryDelay ?? 2000,
-        requestDelay: input.requestDelay ?? 500,
+        requestDelay: input.requestDelay ?? 500
     };
 }
 
@@ -219,7 +219,7 @@ function normalizeItem(item: Item): NormalizedItem {
         title: sanitizeForTable(item.title || 'Untitled'),
         href: parsed.href,
         hostname: extractHostname(parsed.hostname.replace(/^www\./, '')),
-        origin: parsed.origin,
+        origin: parsed.origin
     };
 }
 
@@ -326,7 +326,7 @@ async function fetchFeed(
     url: string,
     retries: number,
     retryDelay: number,
-    requestDelay: number,
+    requestDelay: number
 ): Promise<Parser.Output<Item>> {
     if (feedCache.has(url)) {
         core.info(`Cache hit — skipping fetch for ${url}`);
@@ -382,10 +382,7 @@ async function fetchFeed(
  * @returns Array of {@link FeedSource} objects eligible for selection
  * @throws If no feeds match the filter or the subscribe map is empty
  */
-function resolveEligibleFeeds(
-    subscribe: Record<string, string>,
-    select: string[],
-): FeedSource[] {
+function resolveEligibleFeeds(subscribe: Record<string, string>, select: string[]): FeedSource[] {
     let entries = Object.entries(subscribe).map(([name, url]) => ({ name, url }));
 
     if (select.length > 0) {
@@ -393,7 +390,7 @@ function resolveEligibleFeeds(
         if (entries.length === 0) {
             throw new Error(
                 `Feed widget: none of the selected feeds exist: [${select.join(', ')}]. ` +
-                `Available: [${Object.keys(subscribe).join(', ')}]`
+                    `Available: [${Object.keys(subscribe).join(', ')}]`
             );
         }
     }
@@ -461,54 +458,54 @@ function processItems(items: Item[], shuffle: boolean, rows: number): Item[] {
  * // => "|Index|Posts|Domain|\n|---|---|---|\n| 1 | [Article](https://...) | ... |"
  * ```
  */
-export async function feed(
-    subscribe: Record<string, string>,
-    widget: Widget<FeedConfig>,
-): Promise<string> {
+export async function feed(subscribe: Record<string, string>, widget: Widget<FeedConfig>): Promise<string> {
     core.startGroup('Feed Widgets');
-    const config = resolveConfig(widget.config);
-
-    // --- Feed selection ---
-    let eligible: FeedSource[];
     try {
-        eligible = resolveEligibleFeeds(subscribe, config.select);
-    } catch (err: any) {
-        core.error(err.message);
-        return `> ⚠️ Feed widget configuration error: ${err.message}`;
+        const config = resolveConfig(widget.config);
+
+        // --- Feed selection ---
+        let eligible: FeedSource[];
+        try {
+            eligible = resolveEligibleFeeds(subscribe, config.select);
+        } catch (err: any) {
+            core.error(err.message);
+            return `> ⚠️ Feed widget configuration error: ${err.message}`;
+        }
+
+        const source = pickRandomItems(eligible, 1)[0];
+        core.info(`Selected feed: "${source.name}" → ${source.url}`);
+
+        // --- Fetch ---
+        const parser = new Parser();
+        let result: Parser.Output<Item>;
+        try {
+            result = await fetchFeed(parser, source.url, config.retries, config.retryDelay, config.requestDelay);
+        } catch (err: any) {
+            return `> ⚠️ Could not load feed **${source.name}**: ${err.message}. It may be temporarily unavailable.`;
+        }
+
+        // --- Process items ---
+        const rawItems = result.items ?? [];
+        const processed = processItems(rawItems, config.shuffle, config.rows);
+
+        if (processed.length === 0) {
+            core.warning(`Feed "${source.name}" returned no items.`);
+            return `> ⚠️ Feed **${source.name}** is currently empty.`;
+        }
+
+        // --- Normalize & serialize ---
+        const normalized = processed.map(normalizeItem);
+        const rows = normalized.map((item, idx) => serializeItem(item, idx + 1, config.raw));
+        let content = config.raw ? rows.join('\n') : wrapInTable(rows);
+
+        // --- Optional title ---
+        if (config.title) {
+            content = prependTitle(content, source);
+        }
+
+        core.info(`Generated feed widget for "${source.name}" with ${processed.length} items.`);
+        return content;
+    } finally {
+        core.endGroup();
     }
-
-    const source = pickRandomItems(eligible, 1)[0];
-    core.info(`Selected feed: "${source.name}" → ${source.url}`);
-
-    // --- Fetch ---
-    const parser = new Parser();
-    let result: Parser.Output<Item>;
-    try {
-        result = await fetchFeed(parser, source.url, config.retries, config.retryDelay, config.requestDelay);
-    } catch (err: any) {
-        return `> ⚠️ Could not load feed **${source.name}**: ${err.message}. It may be temporarily unavailable.`;
-    }
-
-    // --- Process items ---
-    const rawItems = result.items ?? [];
-    const processed = processItems(rawItems, config.shuffle, config.rows);
-
-    if (processed.length === 0) {
-        core.warning(`Feed "${source.name}" returned no items.`);
-        return `> ⚠️ Feed **${source.name}** is currently empty.`;
-    }
-
-    // --- Normalize & serialize ---
-    const normalized = processed.map(normalizeItem);
-    const rows = normalized.map((item, idx) => serializeItem(item, idx + 1, config.raw));
-    let content = config.raw ? rows.join('\n') : wrapInTable(rows);
-
-    // --- Optional title ---
-    if (config.title) {
-        content = prependTitle(content, source);
-    }
-
-    core.info(`Generated feed widget for "${source.name}" with ${processed.length} items.`);
-    core.endGroup();
-    return content;
 }
