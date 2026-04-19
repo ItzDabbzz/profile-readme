@@ -8,6 +8,10 @@ var __hasOwnProp = Object.prototype.hasOwnProperty;
 var __commonJS = (cb, mod) => function __require() {
   return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
 };
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
 var __copyProps = (to, from, except, desc) => {
   if (from && typeof from === "object" || typeof from === "function") {
     for (let key of __getOwnPropNames(from))
@@ -24,6 +28,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
   isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
   mod
 ));
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
 // node_modules/tunnel/lib/tunnel.js
 var require_tunnel = __commonJS({
@@ -31531,6 +31536,13 @@ var require_moment_timezone2 = __commonJS({
   }
 });
 
+// src/index.ts
+var index_exports = {};
+__export(index_exports, {
+  run: () => run
+});
+module.exports = __toCommonJS(index_exports);
+
 // node_modules/@actions/core/lib/command.js
 var os = __toESM(require("os"), 1);
 
@@ -31969,6 +31981,9 @@ var ExitCode;
   ExitCode2[ExitCode2["Success"] = 0] = "Success";
   ExitCode2[ExitCode2["Failure"] = 1] = "Failure";
 })(ExitCode || (ExitCode = {}));
+function setSecret(secret) {
+  issueCommand("add-mask", {}, secret);
+}
 function getInput(name, options) {
   const val = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`] || "";
   if (options && options.required && !val) {
@@ -31978,6 +31993,10 @@ function getInput(name, options) {
     return val;
   }
   return val.trim();
+}
+function setFailed(message) {
+  process.exitCode = ExitCode.Failure;
+  error(message);
 }
 function error(message, properties = {}) {
   issueCommand("error", toCommandProperties(properties), message instanceof Error ? message.toString() : message);
@@ -35920,10 +35939,13 @@ function describeEvent(event, config) {
     case "PushEvent": {
       const count = payload.size ?? payload.commits?.length ?? 0;
       const ref = payload.ref ?? "";
-      const label = count === 1 ? "commit" : "commits";
       const branch = refLink(repo, ref, links);
       const head = payload.head ?? "";
       const headStr = head ? ` (${commitLink(repo, head, links)})` : "";
+      if (count === 0) {
+        return `Pushed to ${branch} in ${repoLink(repo, links)}${headStr}`;
+      }
+      const label = count === 1 ? "commit" : "commits";
       return `Pushed ${count} ${label} to ${branch} in ${repoLink(repo, links)}${headStr}`;
     }
     case "ReleaseEvent": {
@@ -35981,33 +36003,38 @@ function renderCompact(events, showDate) {
   }).join("\n");
 }
 function activity(events, widget) {
-  startGroup("Activity Widgets");
-  const config = widget.config;
-  const supported = Object.keys(EVENT_BADGE);
-  const include = config.include ?? supported;
-  const exclude = config.exclude ?? [];
-  const style = config.raw ? "compact" : config.style ?? "table";
-  const showDate = config.showDate ?? false;
-  const filtered = events.data.filter((e) => supported.includes(e.type)).filter((e) => include.includes(e.type)).filter((e) => !exclude.includes(e.type)).slice(0, config.rows ?? 10);
-  const built = filtered.map((e) => build(e, config));
-  if (config.groupByRepo) {
-    const grouped = /* @__PURE__ */ new Map();
-    for (const e of built) {
-      if (!grouped.has(e.repo)) grouped.set(e.repo, []);
-      grouped.get(e.repo).push(e);
-    }
-    return Array.from(grouped.entries()).map(([repo, items]) => {
-      const header = `### \u{1F4C1} [${repo}](https://github.com/${repo})`;
-      const body = style === "list" ? renderList(items, showDate) : style === "compact" ? renderCompact(items, showDate) : renderTable(items, showDate, config.showLinks);
-      return `${header}
+  const isTest = process.env.NODE_ENV === "test";
+  if (!isTest) startGroup("Activity Widgets");
+  try {
+    const config = widget.config;
+    const supported = Object.keys(EVENT_BADGE);
+    const include = config.include ?? supported;
+    const exclude = config.exclude ?? [];
+    const style = config.raw ? "compact" : config.style ?? "table";
+    const showDate = config.showDate ?? false;
+    const showLinks = config.raw ? false : config.showLinks ?? true;
+    const filtered = events.data.filter((e) => include.includes(e.type)).filter((e) => !exclude.includes(e.type)).slice(0, config.rows ?? 10);
+    const built = filtered.map((e) => build(e, { ...config, showLinks }));
+    if (config.groupByRepo) {
+      const grouped = /* @__PURE__ */ new Map();
+      for (const e of built) {
+        if (!grouped.has(e.repo)) grouped.set(e.repo, []);
+        grouped.get(e.repo).push(e);
+      }
+      return Array.from(grouped.entries()).map(([repo, items]) => {
+        const header = `### \u{1F4C1} ${repo}`;
+        const body = style === "list" ? renderList(items, showDate) : style === "compact" ? renderCompact(items, showDate) : renderTable(items, showDate, showLinks);
+        return `${header}
 ${body}`;
-    }).join("\n\n");
+      }).join("\n\n");
+    }
+    if (style === "list") return renderList(built, showDate);
+    if (style === "compact") return renderCompact(built, showDate);
+    if (!isTest) info(`Rendering activity with ${built.length} events`);
+    return renderTable(built, showDate, showLinks);
+  } finally {
+    if (!isTest) endGroup();
   }
-  if (style === "list") return renderList(built, showDate);
-  if (style === "compact") return renderCompact(built, showDate);
-  info(`Rendering activity with ${built.length} events`);
-  endGroup();
-  return renderTable(built, showDate, config.showLinks);
 }
 
 // src/widgets/feed.ts
@@ -36145,38 +36172,41 @@ function processItems(items, shuffle, rows) {
 }
 async function feed(subscribe, widget) {
   startGroup("Feed Widgets");
-  const config = resolveConfig(widget.config);
-  let eligible;
   try {
-    eligible = resolveEligibleFeeds(subscribe, config.select);
-  } catch (err) {
-    error(err.message);
-    return `> \u26A0\uFE0F Feed widget configuration error: ${err.message}`;
+    const config = resolveConfig(widget.config);
+    let eligible;
+    try {
+      eligible = resolveEligibleFeeds(subscribe, config.select);
+    } catch (err) {
+      error(err.message);
+      return `> \u26A0\uFE0F Feed widget configuration error: ${err.message}`;
+    }
+    const source = pickRandomItems(eligible, 1)[0];
+    info(`Selected feed: "${source.name}" \u2192 ${source.url}`);
+    const parser = new import_rss_parser.default();
+    let result;
+    try {
+      result = await fetchFeed(parser, source.url, config.retries, config.retryDelay, config.requestDelay);
+    } catch (err) {
+      return `> \u26A0\uFE0F Could not load feed **${source.name}**: ${err.message}. It may be temporarily unavailable.`;
+    }
+    const rawItems = result.items ?? [];
+    const processed = processItems(rawItems, config.shuffle, config.rows);
+    if (processed.length === 0) {
+      warning(`Feed "${source.name}" returned no items.`);
+      return `> \u26A0\uFE0F Feed **${source.name}** is currently empty.`;
+    }
+    const normalized = processed.map(normalizeItem);
+    const rows = normalized.map((item, idx) => serializeItem(item, idx + 1, config.raw));
+    let content = config.raw ? rows.join("\n") : wrapInTable(rows);
+    if (config.title) {
+      content = prependTitle(content, source);
+    }
+    info(`Generated feed widget for "${source.name}" with ${processed.length} items.`);
+    return content;
+  } finally {
+    endGroup();
   }
-  const source = pickRandomItems(eligible, 1)[0];
-  info(`Selected feed: "${source.name}" \u2192 ${source.url}`);
-  const parser = new import_rss_parser.default();
-  let result;
-  try {
-    result = await fetchFeed(parser, source.url, config.retries, config.retryDelay, config.requestDelay);
-  } catch (err) {
-    return `> \u26A0\uFE0F Could not load feed **${source.name}**: ${err.message}. It may be temporarily unavailable.`;
-  }
-  const rawItems = result.items ?? [];
-  const processed = processItems(rawItems, config.shuffle, config.rows);
-  if (processed.length === 0) {
-    warning(`Feed "${source.name}" returned no items.`);
-    return `> \u26A0\uFE0F Feed **${source.name}** is currently empty.`;
-  }
-  const normalized = processed.map(normalizeItem);
-  const rows = normalized.map((item, idx) => serializeItem(item, idx + 1, config.raw));
-  let content = config.raw ? rows.join("\n") : wrapInTable(rows);
-  if (config.title) {
-    content = prependTitle(content, source);
-  }
-  info(`Generated feed widget for "${source.name}" with ${processed.length} items.`);
-  endGroup();
-  return content;
 }
 
 // src/widgets/repos.ts
@@ -36293,26 +36323,29 @@ function serialize(item, config) {
 }
 function repos(repositories, widget) {
   startGroup("Repo Widgets");
-  const config = widget.config;
-  const sortKey = config.sort ?? "stars";
-  const order = config.order ?? "desc";
-  const exclude = config.exclude ?? [];
-  const style = config.raw ? "compact" : config.style ?? "table";
-  const comparator = comparators[sortKey] ?? comparators.stars;
-  const directed = order === "asc" ? (a, b) => -comparator(a, b) : comparator;
-  const filtered = repositories.data.filter((item) => !item.private).filter((item) => !exclude.includes(item.full_name)).filter((item) => config.showArchived ? true : !item.archived).filter((item) => config.showForks_repos ? true : !item.fork).filter((item) => config.minStars != null ? item.stargazers_count >= config.minStars : true).filter((item) => config.topic ? (item.topics ?? []).includes(config.topic) : true).sort(directed).slice(0, config.rows ?? 5);
-  const lines = filtered.map((item) => serialize(item, config));
-  const output = style === "compact" ? lines.join("\n\n") : lines.join("\n");
-  info(`Generated ${filtered.length} repositories for widget "${widget.matched}" with style "${style}".`);
-  endGroup();
-  if (style === "table") {
-    return config.showLanguage ? `| | Repo | Stars | Lang | Description |
+  try {
+    const config = widget.config;
+    const sortKey = config.sort ?? "stars";
+    const order = config.order ?? "desc";
+    const exclude = config.exclude ?? [];
+    const style = config.raw ? "compact" : config.style ?? "table";
+    const comparator = comparators[sortKey] ?? comparators.stars;
+    const directed = order === "asc" ? (a, b) => -comparator(a, b) : comparator;
+    const filtered = repositories.data.filter((item) => !item.private).filter((item) => !exclude.includes(item.full_name)).filter((item) => config.showArchived ? true : !item.archived).filter((item) => config.showForks_repos ? true : !item.fork).filter((item) => config.minStars != null ? item.stargazers_count >= config.minStars : true).filter((item) => config.topic ? (item.topics ?? []).includes(config.topic) : true).sort(directed).slice(0, config.rows ?? 5);
+    const lines = filtered.map((item) => serialize(item, config));
+    const output = style === "compact" ? lines.join("\n\n") : lines.join("\n");
+    info(`Generated ${filtered.length} repositories with style "${style}".`);
+    if (style === "table") {
+      return config.showLanguage ? `| | Repo | Stars | Lang | Description |
 |---|---|---|---|---|
 ${output}` : `| | Repo | Stars | Description |
 |---|---|---|---|
 ${output}`;
+    }
+    return output;
+  } finally {
+    endGroup();
   }
-  return output;
 }
 
 // src/widgets/timestamp.ts
@@ -36359,20 +36392,22 @@ function makeBadge(label, value, color) {
 }
 function timestamp(widget) {
   startGroup("Timestamp Widget");
-  const config = resolveConfig2(widget.config);
-  const now = getMoment(config.tz);
-  info(`Mode: ${config.mode} | TZ: ${config.tz ?? "UTC"} | Badge: ${config.badge}`);
-  const value = computeValue(now, config.mode, config.format);
-  info(`Computed value: ${value}`);
-  const output = config.badge ? makeBadge(config.label, value, config.color) : value;
-  endGroup();
-  return output;
+  try {
+    const config = resolveConfig2(widget.config);
+    const now = getMoment(config.tz);
+    info(`Mode: ${config.mode} | TZ: ${config.tz ?? "UTC"} | Badge: ${config.badge}`);
+    const value = computeValue(now, config.mode, config.format);
+    info(`Computed value: ${value}`);
+    return config.badge ? makeBadge(config.label, value, config.color) : value;
+  } finally {
+    endGroup();
+  }
 }
 
 // src/widgets/wakatime.ts
 function resolveConfig3(input) {
   const apiKey = input.apiKey || process.env.INPUT_WAKATIME_KEY;
-  info(`Using WakaTime API Key: ${apiKey ? "***" + apiKey.slice(-2) : "None"}`);
+  if (apiKey) setSecret(apiKey);
   return {
     apiKey,
     range: input.range ?? "last_7_days",
@@ -36447,60 +36482,80 @@ function renderSection(title, items, config) {
 }
 async function wakatime(widget) {
   startGroup("WakaTime Widgets");
-  const config = resolveConfig3(widget.config);
-  if (!config.apiKey) {
-    warning(
-      "WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable."
-    );
-    return `\u26A0\uFE0F Missing WakaTime API key`;
-  }
-  const encoded = Buffer.from(config.apiKey).toString("base64");
-  const res = await fetch(`https://wakatime.com/api/v1/users/current/stats/${config.range}`, {
-    headers: { Authorization: `Basic ${encoded}` }
-  });
-  if (!res.ok) {
-    error(`WakaTime API request failed with status ${res.status}: ${res.statusText}`);
-    return `\u274C API Error ${res.status}`;
-  }
-  const json = await res.json();
-  const data = json.data;
-  const sections = [];
-  sections.push(
-    `## \u23F1 WakaTime Stats
-> ${RANGE_LABEL[config.range]} \xB7 **${data.human_readable_total}** \xB7 \u{1F30D} ${data.timezone}`
-  );
-  if (config.showSummary) {
+  try {
+    const config = resolveConfig3(widget.config);
+    if (!config.apiKey) {
+      warning(
+        "WakaTime API key is missing. Please provide it via widget config or WAKATIME_KEY environment variable."
+      );
+      return `\u26A0\uFE0F Missing WakaTime API key`;
+    }
+    const encoded = Buffer.from(config.apiKey).toString("base64");
+    let res;
+    try {
+      res = await fetch(`https://wakatime.com/api/v1/users/current/stats/${config.range}`, {
+        headers: { Authorization: `Basic ${encoded}` }
+      });
+    } catch (error2) {
+      const message = error2 instanceof Error ? error2.message : String(error2);
+      error(`WakaTime request failed before response: ${message}`);
+      return `\u26A0\uFE0F Could not load WakaTime stats: ${message}`;
+    }
+    if (!res.ok) {
+      error(`WakaTime API request failed with status ${res.status}: ${res.statusText}`);
+      return `\u274C API Error ${res.status}`;
+    }
+    const json = await res.json();
+    const data = json.data;
+    const sections = [];
     sections.push(
-      [
-        badge2("Total", data.human_readable_total),
-        badge2("Languages", String(data.languages?.length ?? 0)),
-        badge2("Editors", String(data.editors?.length ?? 0))
-      ].join(" ")
+      `## \u23F1 WakaTime Stats
+> ${RANGE_LABEL[config.range]} \xB7 **${data.human_readable_total}** \xB7 \u{1F30D} ${data.timezone}`
     );
-  }
-  if (config.showHighlights && data.languages?.length) {
-    const top = data.languages[0];
-    sections.push(`## \u{1F3C6} Highlights
+    if (config.showSummary) {
+      sections.push(
+        [
+          badge2("Total", data.human_readable_total),
+          badge2("Languages", String(data.languages?.length ?? 0)),
+          badge2("Editors", String(data.editors?.length ?? 0))
+        ].join(" ")
+      );
+    }
+    if (config.showHighlights && data.languages?.length) {
+      const top = data.languages[0];
+      sections.push(`## \u{1F3C6} Highlights
 - Top Language: **${top.name}** (${top.percent.toFixed(1)}%)`);
+    }
+    if (config.showLanguages && data.languages?.length) {
+      sections.push(renderSection("\u{1F4AC} Languages", data.languages.slice(0, config.rows), config));
+    }
+    if (config.showEditors && data.editors?.length) {
+      sections.push(renderSection("\u{1F525} Editors", data.editors.slice(0, config.rows), config));
+    }
+    if (config.showOS && data.operating_systems?.length) {
+      sections.push(renderSection("\u{1F5A5} OS", data.operating_systems.slice(0, config.rows), config));
+    }
+    if (config.showProjects && data.projects?.length) {
+      sections.push(renderSection("\u{1F4C1} Projects", data.projects.slice(0, config.rows), config));
+    }
+    info(`WakaTime widget generated successfully with ${sections.length} sections.`);
+    return sections.join("\n\n");
+  } finally {
+    endGroup();
   }
-  if (config.showLanguages && data.languages?.length) {
-    sections.push(renderSection("\u{1F4AC} Languages", data.languages.slice(0, config.rows), config));
-  }
-  if (config.showEditors && data.editors?.length) {
-    sections.push(renderSection("\u{1F525} Editors", data.editors.slice(0, config.rows), config));
-  }
-  if (config.showOS && data.operating_systems?.length) {
-    sections.push(renderSection("\u{1F5A5} OS", data.operating_systems.slice(0, config.rows), config));
-  }
-  if (config.showProjects && data.projects?.length) {
-    sections.push(renderSection("\u{1F4C1} Projects", data.projects.slice(0, config.rows), config));
-  }
-  info(`WakaTime widget generated successfully with ${sections.length} sections.`);
-  endGroup();
-  return sections.join("\n\n");
 }
 
 // src/index.ts
+function pluralize(count, noun) {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+function renderLabel(widgetType, index, total) {
+  return `${widgetType} widget ${index + 1}/${total}`;
+}
+function formatError(error2) {
+  if (error2 instanceof Error) return error2.message;
+  return String(error2);
+}
 async function run() {
   const token = getInput("github_token");
   const wakaTimeKey = getInput("wakatime_key");
@@ -36508,65 +36563,77 @@ async function run() {
   const readme = getInput("readme");
   const username = getInput("username");
   const subscriptions = getInput("feed");
+  setSecret(token);
+  if (wakaTimeKey) setSecret(wakaTimeKey);
   const octokit = getOctokit(token);
   let source = fs2.readFileSync(template, "utf-8");
   const activityWidgets = widgets("GITHUB_ACTIVITY", source);
   if (activityWidgets) {
-    info(`Found ${activityWidgets.length} activity widget.`);
+    info(`Found ${pluralize(activityWidgets.length, "activity widget")}.`);
     info(`Collecting activity for user ${username}...`);
     const events = await octokit.rest.activity.listPublicEventsForUser({
       username,
       per_page: 100
     });
-    for (const widget of activityWidgets) {
-      info(`Generating widget "${widget.matched}"`);
+    for (const [index, widget] of activityWidgets.entries()) {
+      info(`Rendering ${renderLabel("activity", index, activityWidgets.length)}.`);
       source = source.replace(widget.matched, activity(events, widget));
     }
   }
   const reposWidgets = widgets("GITHUB_REPOS", source);
   if (reposWidgets) {
-    info(`Found ${reposWidgets.length} repos widget.`);
+    info(`Found ${pluralize(reposWidgets.length, "repository widget")}.`);
     info(`Collecting repos for user ${username}...`);
     const repositories = await octokit.rest.repos.listForUser({
       username,
       type: "all",
       per_page: 100
     });
-    for (const widget of reposWidgets) {
-      info(`Generating widget "${widget.matched}"`);
+    for (const [index, widget] of reposWidgets.entries()) {
+      info(`Rendering ${renderLabel("repository", index, reposWidgets.length)}.`);
       source = source.replace(widget.matched, repos(repositories, widget));
     }
   }
   const timestampWidgets = widgets("TIMESTAMP", source);
   if (timestampWidgets) {
-    info(`Found ${timestampWidgets.length} timestamp widget.`);
-    for (const widget of timestampWidgets) {
-      info(`Generating widget "${widget.matched}"`);
+    info(`Found ${pluralize(timestampWidgets.length, "timestamp widget")}.`);
+    for (const [index, widget] of timestampWidgets.entries()) {
+      info(`Rendering ${renderLabel("timestamp", index, timestampWidgets.length)}.`);
       source = source.replace(widget.matched, timestamp(widget));
     }
   }
   const wakatimeWidgets = widgets("WAKATIME", source);
   if (wakatimeWidgets) {
-    for (const widget of wakatimeWidgets) {
+    info(`Found ${pluralize(wakatimeWidgets.length, "WakaTime widget")}.`);
+    for (const [index, widget] of wakatimeWidgets.entries()) {
+      info(`Rendering ${renderLabel("WakaTime", index, wakatimeWidgets.length)}.`);
       if (!widget.config.apiKey && wakaTimeKey) widget.config.apiKey = wakaTimeKey;
       source = source.replace(widget.matched, await wakatime(widget));
     }
   }
-  if (fs2.existsSync(subscriptions)) {
-    const subscribe = JSON.parse(fs2.readFileSync(subscriptions, "utf-8"));
-    const feedWidgets = widgets("FEED", source);
-    if (feedWidgets) {
-      info(`Found ${feedWidgets.length} feed widget.`);
-      for (const widget of feedWidgets) {
+  const feedWidgets = widgets("FEED", source);
+  if (feedWidgets) {
+    info(`Found ${pluralize(feedWidgets.length, "feed widget")}.`);
+    if (!subscriptions || !fs2.existsSync(subscriptions)) {
+      warning("Feed widgets found, but no readable feed file was provided. Skipping feed widgets.");
+    } else {
+      const subscribe = JSON.parse(fs2.readFileSync(subscriptions, "utf-8"));
+      for (const [index, widget] of feedWidgets.entries()) {
+        info(`Rendering ${renderLabel("feed", index, feedWidgets.length)}.`);
         source = source.replace(widget.matched, await feed(subscribe, widget));
       }
     }
   }
   fs2.writeFileSync(readme, source);
 }
-run().catch((error2) => {
-  error(error2);
-  process.exit(1);
+if (process.env.NODE_ENV !== "test") {
+  run().catch((error2) => {
+    setFailed(formatError(error2));
+  });
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  run
 });
 /*! Bundled license information:
 
