@@ -154,11 +154,24 @@ describe('repos – sorting', () => {
     });
 
     it('sorts alphabetically by full_name', () => {
-        const out = repos(data, makeWidget({ raw: true, sort: 'full_name', order: 'asc', rows: 3 }));
-        console.log(out)
-        const lines = out.trim().split('\n');
+        const out = repos(data, makeWidget({ raw: true, sort: 'full_name', order: 'asc' }));
+        const lines = out.trim().split('\n').filter(Boolean);
         expect(lines[0]).toContain('alpha');
-        expect(lines[2]).toContain('beta');
+        expect(lines[1]).toContain('beta');
+        expect(lines[2]).toContain('gamma');
+    });
+
+    it('sorts by pushed date descending', () => {
+        const dateData = makeRepos([
+            { name: 'newest', pushed_at: '2026-01-01T00:00:00Z' },
+            { name: 'oldest', pushed_at: '2024-01-01T00:00:00Z' },
+            { name: 'middle', pushed_at: '2025-01-01T00:00:00Z' }
+        ]);
+        const out = repos(dateData, makeWidget({ raw: true, sort: 'pushed' }));
+        const lines = out.trim().split('\n').filter(Boolean);
+        expect(lines[0]).toContain('newest');
+        expect(lines[1]).toContain('middle');
+        expect(lines[2]).toContain('oldest');
     });
 });
 
@@ -234,5 +247,24 @@ describe('repos – optional columns', () => {
         const data = makeRepos([{ name: 'old', archived: true }]);
         const out = repos(data, makeWidget({ style: 'list', showArchived: true }));
         expect(out).toMatch(/archived/i);
+    });
+
+    it('shows description when showDescription is true (default)', () => {
+        const data = makeRepos([{ description: 'My test description' }]);
+        const out = repos(data, makeWidget({ raw: true, showDescription: true }));
+        expect(out).toContain('My test description');
+    });
+
+    it('shows badges by default in table mode', () => {
+        const data = makeRepos([{ name: 'my-repo' }]);
+        const out = repos(data, makeWidget({ style: 'table', showBadges: true }));
+        expect(out).toContain('shields.io');
+    });
+
+    it('shows text instead of badges when showBadges is false', () => {
+        const data = makeRepos([{ name: 'my-repo', stargazers_count: 99 }]);
+        const out = repos(data, makeWidget({ style: 'table', showBadges: false }));
+        expect(out).not.toContain('shields.io');
+        expect(out).toContain('99');
     });
 });

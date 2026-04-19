@@ -103,7 +103,7 @@ const LANGUAGE_EMOJI: Record<string, string> = {
     Elixir: '💧',
     Zig: '⚡',
     Haskell: 'λ',
-    'N/A': "❌"
+    'N/A': '❌'
 };
 
 /**
@@ -239,38 +239,42 @@ function serialize(item: any, config: Partial<ReposConfig>): string {
  */
 export function repos(repositories: any, widget: Widget<ReposConfig>): string {
     core.startGroup('Repo Widgets');
-    const config = widget.config;
-    const sortKey = config.sort ?? 'stars';
-    const order = config.order ?? 'desc';
-    const exclude = config.exclude ?? [];
-    const style = config.raw ? 'compact' : (config.style ?? 'table');
+    try {
+        const config = widget.config;
+        const sortKey = config.sort ?? 'stars';
+        const order = config.order ?? 'desc';
+        const exclude = config.exclude ?? [];
+        const style = config.raw ? 'compact' : (config.style ?? 'table');
 
-    const comparator = comparators[sortKey] ?? comparators.stars;
-    const directed = order === 'asc' ? (a: any, b: any) => -comparator(a, b) : comparator;
+        const comparator = comparators[sortKey] ?? comparators.stars;
+        const directed = order === 'asc' ? (a: any, b: any) => -comparator(a, b) : comparator;
 
-    const filtered = (repositories.data as any[])
-        .filter(item => !item.private)
-        .filter(item => !exclude.includes(item.full_name))
-        .filter(item => (config.showArchived ? true : !item.archived))
-        .filter(item => (config.showForks_repos ? true : !item.fork))
-        .filter(item => (config.minStars != null ? item.stargazers_count >= config.minStars : true))
-        .filter(item => (config.topic ? (item.topics ?? []).includes(config.topic) : true))
-        .sort(directed)
-        .slice(0, config.rows ?? 5);
+        const filtered = (repositories.data as any[])
+            .filter(item => !item.private)
+            .filter(item => !exclude.includes(item.full_name))
+            .filter(item => (config.showArchived ? true : !item.archived))
+            .filter(item => (config.showForks_repos ? true : !item.fork))
+            .filter(item => (config.minStars != null ? item.stargazers_count >= config.minStars : true))
+            .filter(item => (config.topic ? (item.topics ?? []).includes(config.topic) : true))
+            .sort(directed)
+            .slice(0, config.rows ?? 5);
 
-    const lines = filtered.map(item => serialize(item, config));
-    const output = (style === 'compact')
-        ? lines.join('\n\n')  // blank line between compact items
-        : lines.join('\n');   // single newline for table rows / list items
+        const lines = filtered.map(item => serialize(item, config));
+        const output =
+            style === 'compact'
+                ? lines.join('\n\n') // blank line between compact items
+                : lines.join('\n'); // single newline for table rows / list items
 
-    core.info(`Generated ${filtered.length} repositories for widget "${widget.matched}" with style "${style}".`);
-    core.endGroup();
+        core.info(`Generated ${filtered.length} repositories with style "${style}".`);
 
-    if (style === 'table') {
-        return config.showLanguage
-            ? `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${output}`
-            : `| | Repo | Stars | Description |\n|---|---|---|---|\n${output}`;
+        if (style === 'table') {
+            return config.showLanguage
+                ? `| | Repo | Stars | Lang | Description |\n|---|---|---|---|---|\n${output}`
+                : `| | Repo | Stars | Description |\n|---|---|---|---|\n${output}`;
+        }
+
+        return output;
+    } finally {
+        core.endGroup();
     }
-
-    return output;
 }
