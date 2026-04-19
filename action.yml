@@ -5,26 +5,26 @@ branding:
 description: "Collection of widgets for your profile README updated and extended with love"
 inputs:
   feed:
-    description: "FEED.json file path"
+    description: "Path to FEEDS.json input file"
     required: false
   github_token:
-    description: 'Token for the repo. Can be passed in using $\{{ secrets.GITHUB_TOKEN }}'
+    description: "GitHub token used for API requests"
     required: true
   readme:
     default: "./README.md"
     description: "README.md output file path"
-    required: true
+    required: false
   template:
     default: "./TEMPLATE.md"
     description: "TEMPLATE.md file path"
-    required: true
+    required: false
   username:
-    description: "Github profile username"
+    description: "GitHub profile username"
     required: true
   wakatime_key:
-    description: "WakaTime API Key"
+    description: "WakaTime API key"
     required: false
 name: "Profile Readme Widgets"
 runs:
   main: "dist/index.js"
-  using: 'node24'
+  using: "node24"
