@@ -1,5 +1,17 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, mock } from 'bun:test';
 import { capitalize, pickRandomItems } from '../src/helpers';
+
+// Mock the GitHub Actions core library to prevent log spam during tests.
+mock.module('@actions/core', () => ({
+    debug: () => {},
+    info: () => {},
+    warning: () => {},
+    error: () => {},
+    notice: () => {},
+    startGroup: () => {},
+    endGroup: () => {},
+    group: async <T>(name: string, fn: () => Promise<T>): Promise<T> => fn()
+}));
 
 // ─── capitalize ───────────────────────────────────────────────────────────────
 
