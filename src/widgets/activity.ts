@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import moment from 'moment';
-import { Widget } from '../widget';
 import { capitalize } from '../helpers';
+import { Widget } from '../widget';
 
 /**
  * Configuration options for the activity widget.
@@ -49,23 +49,23 @@ export interface ActivityConfig {
  * @see https://docs.github.com/en/rest/using-the-rest-api/github-event-types
  */
 const EVENT_BADGE: Record<string, { label: string; color: string; emoji: string }> = {
-    CommitCommentEvent:              { label: 'comment',  color: '79c0ff', emoji: '💬' },
-    CreateEvent:                     { label: 'create',   color: '58a6ff', emoji: '🌿' },
-    DeleteEvent:                     { label: 'delete',   color: 'f85149', emoji: '🗑️' },
-    ForkEvent:                       { label: 'fork',     color: '56d364', emoji: '🍴' },
-    GollumEvent:                     { label: 'wiki',     color: '8b949e', emoji: '📖' },
-    IssueCommentEvent:               { label: 'comment',  color: '79c0ff', emoji: '🗣️' },
-    IssuesEvent:                     { label: 'issue',    color: 'e4e669', emoji: '❗' },
-    MemberEvent:                     { label: 'member',   color: 'a371f7', emoji: '👥' },
-    PublicEvent:                     { label: 'public',   color: '3fb950', emoji: '🎉' },
-    PullRequestEvent:                { label: 'PR',       color: 'a371f7', emoji: '🔀' },
-    PullRequestReviewEvent:          { label: 'review',   color: 'f0883e', emoji: '👀' },
-    PullRequestReviewCommentEvent:   { label: 'review',   color: 'f0883e', emoji: '💬' },
-    PullRequestReviewThreadEvent:    { label: 'thread',   color: 'f0883e', emoji: '🧵' },
-    PushEvent:                       { label: 'push',     color: '4c9be8', emoji: '⬆️' },
-    ReleaseEvent:                    { label: 'release',  color: '3fb950', emoji: '🚀' },
-    SponsorshipEvent:                { label: 'sponsor',  color: 'db61a2', emoji: '💖' },
-    WatchEvent:                      { label: 'star',     color: 'e3b341', emoji: '⭐' },
+    CommitCommentEvent: { label: 'comment', color: '79c0ff', emoji: '💬' },
+    CreateEvent: { label: 'create', color: '58a6ff', emoji: '🌿' },
+    DeleteEvent: { label: 'delete', color: 'f85149', emoji: '🗑️' },
+    ForkEvent: { label: 'fork', color: '56d364', emoji: '🍴' },
+    GollumEvent: { label: 'wiki', color: '8b949e', emoji: '📖' },
+    IssueCommentEvent: { label: 'comment', color: '79c0ff', emoji: '🗣️' },
+    IssuesEvent: { label: 'issue', color: 'e4e669', emoji: '❗' },
+    MemberEvent: { label: 'member', color: 'a371f7', emoji: '👥' },
+    PublicEvent: { label: 'public', color: '3fb950', emoji: '🎉' },
+    PullRequestEvent: { label: 'PR', color: 'a371f7', emoji: '🔀' },
+    PullRequestReviewEvent: { label: 'review', color: 'f0883e', emoji: '👀' },
+    PullRequestReviewCommentEvent: { label: 'review', color: 'f0883e', emoji: '💬' },
+    PullRequestReviewThreadEvent: { label: 'thread', color: 'f0883e', emoji: '🧵' },
+    PushEvent: { label: 'push', color: '4c9be8', emoji: '⬆️' },
+    ReleaseEvent: { label: 'release', color: '3fb950', emoji: '🚀' },
+    SponsorshipEvent: { label: 'sponsor', color: 'db61a2', emoji: '💖' },
+    WatchEvent: { label: 'star', color: 'e3b341', emoji: '⭐' }
 };
 
 // ---------------------------------------------------------------------------
@@ -117,7 +117,6 @@ function repoLink(repoName: string, links: boolean): string {
     return links ? `**[${repoName}](https://github.com/${repoName})**` : `**${repoName}**`;
 }
 
-
 /**
  * Renders an issue number as a GitHub issue link.
  *
@@ -150,7 +149,9 @@ function prLink(repoName: string, num: number, links: boolean): string {
  */
 function releaseLink(repoName: string, tag: string, name: string, links: boolean): string {
     const label = name || tag;
-    return links ? `[\`${label}\`](https://github.com/${repoName}/releases/tag/${encodeURIComponent(tag)})` : `\`${label}\``;
+    return links
+        ? `[\`${label}\`](https://github.com/${repoName}/releases/tag/${encodeURIComponent(tag)})`
+        : `\`${label}\``;
 }
 
 /**
@@ -302,7 +303,7 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
                 approved: 'Approved',
                 changes_requested: 'Requested changes on',
                 commented: 'Commented on',
-                dismissed: 'Dismissed review on',
+                dismissed: 'Dismissed review on'
             };
             const verb = stateLabel[state] ?? 'Reviewed';
             return `${verb} PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
@@ -319,10 +320,15 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
         case 'PushEvent': {
             const count: number = payload.size ?? payload.commits?.length ?? 0;
             const ref: string = payload.ref ?? '';
-            const label = count === 1 ? 'commit' : 'commits';
             const branch = refLink(repo, ref, links);
             const head: string = payload.head ?? '';
             const headStr = head ? ` (${commitLink(repo, head, links)})` : '';
+
+            if (count === 0) {
+                return `Pushed to ${branch} in ${repoLink(repo, links)}${headStr}`;
+            }
+
+            const label = count === 1 ? 'commit' : 'commits';
             return `Pushed ${count} ${label} to ${branch} in ${repoLink(repo, links)}${headStr}`;
         }
         case 'ReleaseEvent': {
@@ -420,51 +426,56 @@ function renderCompact(events: any[], showDate: boolean): string {
  * ```
  */
 export function activity(events: any, widget: Widget<ActivityConfig>): string {
-    core.startGroup('Activity Widgets');
-    const config = widget.config;
-    const supported = Object.keys(EVENT_BADGE);
+    const isTest = process.env.NODE_ENV === 'test';
+    if (!isTest) core.startGroup('Activity Widgets');
 
-    const include = config.include ?? supported;
-    const exclude = config.exclude ?? [];
-    const style = config.raw ? 'compact' : (config.style ?? 'table');
-    const showDate = config.showDate ?? false;
+    try {
+        const config = widget.config;
+        const supported = Object.keys(EVENT_BADGE);
 
-    const filtered = (events.data as any[])
-        .filter(e => supported.includes(e.type))
-        .filter(e => include.includes(e.type))
-        .filter(e => !exclude.includes(e.type))
-        .slice(0, config.rows ?? 10);
+        const include = config.include ?? supported;
+        const exclude = config.exclude ?? [];
+        const style = config.raw ? 'compact' : (config.style ?? 'table');
+        const showDate = config.showDate ?? false;
+        const showLinks = config.raw ? false : (config.showLinks ?? true);
 
-    const built = filtered.map(e => build(e, config));
+        const filtered = (events.data as any[])
+            .filter(e => include.includes(e.type))
+            .filter(e => !exclude.includes(e.type))
+            .slice(0, config.rows ?? 10);
 
-    if (config.groupByRepo) {
-        const grouped = new Map<string, any[]>();
+        const built = filtered.map(e => build(e, { ...config, showLinks }));
 
-        for (const e of built) {
-            if (!grouped.has(e.repo)) grouped.set(e.repo, []);
-            grouped.get(e.repo)!.push(e);
+        if (config.groupByRepo) {
+            const grouped = new Map<string, any[]>();
+
+            for (const e of built) {
+                if (!grouped.has(e.repo)) grouped.set(e.repo, []);
+                grouped.get(e.repo)!.push(e);
+            }
+
+            return Array.from(grouped.entries())
+                .map(([repo, items]) => {
+                    const header = `### 📁 ${repo}`;
+
+                    const body =
+                        style === 'list'
+                            ? renderList(items, showDate)
+                            : style === 'compact'
+                              ? renderCompact(items, showDate)
+                              : renderTable(items, showDate, showLinks);
+
+                    return `${header}\n${body}`;
+                })
+                .join('\n\n');
         }
 
-        return Array.from(grouped.entries())
-            .map(([repo, items]) => {
-                const header = `### 📁 [${repo}](https://github.com/${repo})`;
+        if (style === 'list') return renderList(built, showDate);
+        if (style === 'compact') return renderCompact(built, showDate);
 
-                const body =
-                    style === 'list'
-                        ? renderList(items, showDate)
-                        : style === 'compact'
-                          ? renderCompact(items, showDate)
-                          : renderTable(items, showDate, config.showLinks as boolean);
-
-                return `${header}\n${body}`;
-            })
-            .join('\n\n');
+        if (!isTest) core.info(`Rendering activity with ${built.length} events`);
+        return renderTable(built, showDate, showLinks);
+    } finally {
+        if (!isTest) core.endGroup();
     }
-
-    if (style === 'list') return renderList(built, showDate);
-    if (style === 'compact') return renderCompact(built, showDate);
-
-    core.info(`Rendering activity with ${built.length} events`);
-    core.endGroup();
-    return renderTable(built, showDate, config.showLinks as boolean);
 }
