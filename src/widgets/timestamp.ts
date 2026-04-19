@@ -95,7 +95,7 @@ function resolveConfig(input: TimestampConfig): ResolvedConfig {
         mode: input.mode ?? 'format',
         badge: input.badge ?? true,
         label: input.label ?? 'Updated',
-        color: input.color ?? '58a6ff',
+        color: input.color ?? '58a6ff'
     };
 }
 
@@ -133,16 +133,16 @@ function getMoment(tz: string | null): moment.Moment {
  * @param format - Custom format string (only used in `"format"` mode)
  * @returns Raw timestamp string before any badge encoding
  */
-function computeValue(
-    now: moment.Moment,
-    mode: ResolvedConfig['mode'],
-    format: string,
-): string {
+function computeValue(now: moment.Moment, mode: ResolvedConfig['mode'], format: string): string {
     switch (mode) {
-        case 'relative': return now.fromNow();
-        case 'unix':     return String(now.unix());
-        case 'iso':      return now.toISOString();
-        default:         return now.format(format);
+        case 'relative':
+            return now.fromNow();
+        case 'unix':
+            return String(now.unix());
+        case 'iso':
+            return now.toISOString();
+        default:
+            return now.format(format);
     }
 }
 
@@ -178,9 +178,9 @@ function computeValue(
 function shieldsEncode(value: string): string {
     return encodeURIComponent(
         value
-            .replace(/-/g, '--')   // escape literal dashes (shields.io path delimiter)
-            .replace(/_/g, '__')   // escape literal underscores (shields.io space char)
-            .replace(/\s+/g, '_'), // spaces → shields.io space character
+            .replace(/-/g, '--') // escape literal dashes (shields.io path delimiter)
+            .replace(/_/g, '__') // escape literal underscores (shields.io space char)
+            .replace(/\s+/g, '_') // spaces → shields.io space character
     );
 }
 
@@ -242,19 +242,17 @@ function makeBadge(label: string, value: string, color: string): string {
  */
 export function timestamp(widget: Widget<TimestampConfig>): string {
     core.startGroup('Timestamp Widget');
+    try {
+        const config = resolveConfig(widget.config);
+        const now = getMoment(config.tz);
 
-    const config = resolveConfig(widget.config);
-    const now = getMoment(config.tz);
+        core.info(`Mode: ${config.mode} | TZ: ${config.tz ?? 'UTC'} | Badge: ${config.badge}`);
 
-    core.info(`Mode: ${config.mode} | TZ: ${config.tz ?? 'UTC'} | Badge: ${config.badge}`);
+        const value = computeValue(now, config.mode, config.format);
+        core.info(`Computed value: ${value}`);
 
-    const value = computeValue(now, config.mode, config.format);
-    core.info(`Computed value: ${value}`);
-
-    const output = config.badge
-        ? makeBadge(config.label, value, config.color)
-        : value;
-
-    core.endGroup();
-    return output;
+        return config.badge ? makeBadge(config.label, value, config.color) : value;
+    } finally {
+        core.endGroup();
+    }
 }
