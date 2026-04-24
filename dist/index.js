@@ -35805,8 +35805,16 @@ var EVENT_BADGE = {
   PublicEvent: { label: "public", color: "3fb950", emoji: "\u{1F389}" },
   PullRequestEvent: { label: "PR", color: "a371f7", emoji: "\u{1F500}" },
   PullRequestReviewEvent: { label: "review", color: "f0883e", emoji: "\u{1F440}" },
-  PullRequestReviewCommentEvent: { label: "review", color: "f0883e", emoji: "\u{1F4AC}" },
-  PullRequestReviewThreadEvent: { label: "thread", color: "f0883e", emoji: "\u{1F9F5}" },
+  PullRequestReviewCommentEvent: {
+    label: "review",
+    color: "f0883e",
+    emoji: "\u{1F4AC}"
+  },
+  PullRequestReviewThreadEvent: {
+    label: "thread",
+    color: "f0883e",
+    emoji: "\u{1F9F5}"
+  },
   PushEvent: { label: "push", color: "4c9be8", emoji: "\u2B06\uFE0F" },
   ReleaseEvent: { label: "release", color: "3fb950", emoji: "\u{1F680}" },
   SponsorshipEvent: { label: "sponsor", color: "db61a2", emoji: "\u{1F496}" },
@@ -35823,6 +35831,15 @@ function formatDate(date, config) {
     return (0, import_moment.default)(date).format(config.dateFormat);
   }
   return (0, import_moment.default)(date).fromNow();
+}
+function resolveAction(eventType, actionSource, config, defaultAction) {
+  const action = actionSource.action;
+  const githubAction = typeof action === "string" && action.trim() !== "" ? action : "";
+  if (githubAction === "") {
+    return defaultAction;
+  }
+  const customAction = config.actionMappings?.[eventType]?.[githubAction];
+  return customAction ?? githubAction;
 }
 function repoLink(repoName, links) {
   return links ? `**[${repoName}](https://github.com/${repoName})**` : `**${repoName}**`;
@@ -35862,11 +35879,13 @@ function describeEvent(event, config) {
       const refType = payload.ref_type ?? "repository";
       const ref = payload.ref ?? "";
       if (refType === "repository") return `Created repository ${repoLink(repo, links)}`;
+      if (!ref) return `Created ${refType} in ${repoLink(repo, links)}`;
       return `Created ${refType} ${refLink(repo, ref, links)} in ${repoLink(repo, links)}`;
     }
     case "DeleteEvent": {
       const refType = payload.ref_type ?? "branch";
       const ref = payload.ref ?? "";
+      if (!ref) return `Deleted ${refType} in ${repoLink(repo, links)}`;
       return `Deleted ${refType} \`${ref}\` in ${repoLink(repo, links)}`;
     }
     case "ForkEvent": {
@@ -35877,28 +35896,31 @@ function describeEvent(event, config) {
       const pages = payload.pages ?? [];
       if (pages.length === 0) return `Updated wiki in ${repoLink(repo, links)}`;
       const first = pages[0];
-      const action = first.action === "created" ? "Created" : "Edited";
+      const action = resolveAction("GollumEvent", first, config, "edited");
+      const verb = action.toLowerCase() === "created" ? "Created" : action.toLowerCase() === "edited" ? "Edited" : capitalize(action);
       const pageTitle = first.title ?? first.page_name ?? "a page";
       const suffix = pages.length > 1 ? ` (+${pages.length - 1} more)` : "";
-      return `${action} wiki page ${wikiLink(repo, pageTitle, links)}${suffix} in ${repoLink(repo, links)}`;
+      return `${verb} wiki page ${wikiLink(repo, pageTitle, links)}${suffix} in ${repoLink(repo, links)}`;
     }
     case "IssueCommentEvent": {
       const num = payload.issue?.number;
       const isPr = !!payload.issue?.pull_request;
+      if (num === void 0 || num === null) return `Commented on an issue/PR in ${repoLink(repo, links)}`;
       const target = isPr ? prLink(repo, num, links) : issueLink(repo, num, links);
       const kind = isPr ? "PR" : "issue";
       return `Commented on ${kind} ${target} in ${repoLink(repo, links)}`;
     }
     case "IssuesEvent": {
-      const action = payload.action ?? "updated";
+      const action = resolveAction("IssuesEvent", payload, config, "updated");
       const num = payload.issue?.number;
       const title = payload.issue?.title ?? "";
+      if (num === void 0 || num === null) return `${capitalize(action)} issue in ${repoLink(repo, links)}`;
       const link = issueLink(repo, num, links);
       const titleStr = title ? ` \u2014 _${title}_` : "";
       return `${capitalize(action)} issue ${link}${titleStr} in ${repoLink(repo, links)}`;
     }
     case "MemberEvent": {
-      const action = payload.action ?? "added";
+      const action = resolveAction("MemberEvent", payload, config, "added");
       const login = payload.member?.login ?? "someone";
       return `${capitalize(action)} @${login} as collaborator to ${repoLink(repo, links)}`;
     }
@@ -35906,18 +35928,20 @@ function describeEvent(event, config) {
       return `Made ${repoLink(repo, links)} public`;
     }
     case "PullRequestEvent": {
-      const action = payload.action ?? "updated";
+      const action = resolveAction("PullRequestEvent", payload, config, "updated");
       const pr = payload.pull_request;
-      const num = pr?.number;
-      const merged = pr?.merged ?? false;
+      if (!pr) return `${capitalize(action)} PR in ${repoLink(repo, links)}`;
+      const num = pr.number;
+      const merged = pr.merged ?? false;
       const displayAction = action === "closed" && merged ? "merged" : action;
-      const title = pr?.title ?? "";
+      const title = pr.title ?? "";
       const titleStr = title ? ` \u2014 _${title}_` : "";
       return `${capitalize(displayAction)} PR ${prLink(repo, num, links)}${titleStr} in ${repoLink(repo, links)}`;
     }
     case "PullRequestReviewEvent": {
       const state = payload.review?.state ?? "reviewed";
       const num = payload.pull_request?.number;
+      if (num === void 0 || num === null) return `Reviewed a PR in ${repoLink(repo, links)}`;
       const stateLabel = {
         approved: "Approved",
         changes_requested: "Requested changes on",
@@ -35929,35 +35953,41 @@ function describeEvent(event, config) {
     }
     case "PullRequestReviewCommentEvent": {
       const num = payload.pull_request?.number;
+      if (num === void 0 || num === null) return `Commented on a review in ${repoLink(repo, links)}`;
       return `Commented on a review of PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
     }
     case "PullRequestReviewThreadEvent": {
-      const action = payload.action ?? "resolved";
+      const action = resolveAction("PullRequestReviewThreadEvent", payload, config, "resolved");
       const num = payload.pull_request?.number;
+      if (num === void 0 || num === null)
+        return `${capitalize(action)} a review thread in ${repoLink(repo, links)}`;
       return `${capitalize(action)} a review thread on PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
     }
     case "PushEvent": {
-      const count = payload.size ?? payload.commits?.length ?? 0;
+      const hasExplicitCount = payload.commits != null || payload.size != null;
+      const count = payload.commits?.length ?? payload.size ?? (payload.ref ? 1 : 0);
       const ref = payload.ref ?? "";
       const branch = refLink(repo, ref, links);
       const head = payload.head ?? "";
       const headStr = head ? ` (${commitLink(repo, head, links)})` : "";
-      if (count === 0) {
+      if (count === 0 || !hasExplicitCount) {
         return `Pushed to ${branch} in ${repoLink(repo, links)}${headStr}`;
       }
       const label = count === 1 ? "commit" : "commits";
       return `Pushed ${count} ${label} to ${branch} in ${repoLink(repo, links)}${headStr}`;
     }
     case "ReleaseEvent": {
-      const action = payload.action ?? "published";
-      const tag = payload.release?.tag_name ?? "";
-      const name = payload.release?.name ?? "";
+      const action = resolveAction("ReleaseEvent", payload, config, "published");
+      const release = payload.release;
+      if (!release) return `${capitalize(action)} release in ${repoLink(repo, links)}`;
+      const tag = release.tag_name ?? "";
+      const name = release.name ?? "";
       return `${capitalize(action)} release ${releaseLink(repo, tag, name, links)} in ${repoLink(repo, links)}`;
     }
     case "SponsorshipEvent": {
-      const action = payload.action ?? "started";
+      const action = resolveAction("SponsorshipEvent", payload, config, "started");
       const login = payload.sponsorship?.sponsorable?.login ?? "someone";
-      const verb = action === "cancelled" ? "Cancelled sponsorship of" : "Started sponsoring";
+      const verb = action.toLowerCase() === "cancelled" ? "Cancelled sponsorship of" : "Started sponsoring";
       return `${verb} @${login}`;
     }
     case "WatchEvent": {
@@ -35968,7 +35998,11 @@ function describeEvent(event, config) {
   }
 }
 function build(event, config) {
-  const b = EVENT_BADGE[event.type] ?? { emoji: "\u2022", label: event.type, color: "888" };
+  const b = EVENT_BADGE[event.type] ?? {
+    emoji: "\u2022",
+    label: event.type,
+    color: "888"
+  };
   return {
     emoji: b.emoji,
     badge: badge(event.type),

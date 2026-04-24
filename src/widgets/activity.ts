@@ -37,6 +37,13 @@ export interface ActivityConfig {
 
     /** Output style format. */
     style: 'table' | 'list' | 'compact';
+
+    /**
+     * Custom mappings for event actions.
+     * Format: { [eventType: string]: { [githubAction: string]: string } }
+     * Example: { 'IssuesEvent': { 'opened': 'created', 'closed': 'resolved' } }
+     */
+    actionMappings?: Record<string, Record<string, string>>;
 }
 
 // ---------------------------------------------------------------------------
@@ -60,8 +67,16 @@ const EVENT_BADGE: Record<string, { label: string; color: string; emoji: string 
     PublicEvent: { label: 'public', color: '3fb950', emoji: '🎉' },
     PullRequestEvent: { label: 'PR', color: 'a371f7', emoji: '🔀' },
     PullRequestReviewEvent: { label: 'review', color: 'f0883e', emoji: '👀' },
-    PullRequestReviewCommentEvent: { label: 'review', color: 'f0883e', emoji: '💬' },
-    PullRequestReviewThreadEvent: { label: 'thread', color: 'f0883e', emoji: '🧵' },
+    PullRequestReviewCommentEvent: {
+        label: 'review',
+        color: 'f0883e',
+        emoji: '💬'
+    },
+    PullRequestReviewThreadEvent: {
+        label: 'thread',
+        color: 'f0883e',
+        emoji: '🧵'
+    },
     PushEvent: { label: 'push', color: '4c9be8', emoji: '⬆️' },
     ReleaseEvent: { label: 'release', color: '3fb950', emoji: '🚀' },
     SponsorshipEvent: { label: 'sponsor', color: 'db61a2', emoji: '💖' },
@@ -101,6 +116,32 @@ function formatDate(date: string, config: Partial<ActivityConfig>): string {
         return moment(date).format(config.dateFormat);
     }
     return moment(date).fromNow();
+}
+
+/**
+ * Resolves an action name from the payload, allowing for user-defined overrides.
+ *
+ * @param eventType - The GitHub event type
+ * @param actionSource - The object containing the action (e.g. payload or a page)
+ * @param config - Widget configuration
+ * @param defaultAction - The fallback action if none is provided or found
+ * @returns The resolved action string
+ */
+function resolveAction(
+    eventType: string,
+    actionSource: any,
+    config: Partial<ActivityConfig>,
+    defaultAction: string
+): string {
+    const action = actionSource.action;
+    const githubAction = typeof action === 'string' && action.trim() !== '' ? action : '';
+
+    if (githubAction === '') {
+        return defaultAction;
+    }
+
+    const customAction = config.actionMappings?.[eventType]?.[githubAction];
+    return customAction ?? githubAction;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,11 +284,13 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
             const refType: string = payload.ref_type ?? 'repository';
             const ref: string = payload.ref ?? '';
             if (refType === 'repository') return `Created repository ${repoLink(repo, links)}`;
+            if (!ref) return `Created ${refType} in ${repoLink(repo, links)}`;
             return `Created ${refType} ${refLink(repo, ref, links)} in ${repoLink(repo, links)}`;
         }
         case 'DeleteEvent': {
             const refType: string = payload.ref_type ?? 'branch';
             const ref: string = payload.ref ?? '';
+            if (!ref) return `Deleted ${refType} in ${repoLink(repo, links)}`;
             return `Deleted ${refType} \`${ref}\` in ${repoLink(repo, links)}`;
         }
         case 'ForkEvent': {
@@ -258,47 +301,61 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
             const pages: any[] = payload.pages ?? [];
             if (pages.length === 0) return `Updated wiki in ${repoLink(repo, links)}`;
             const first = pages[0];
-            const action = first.action === 'created' ? 'Created' : 'Edited';
+            const action = resolveAction('GollumEvent', first, config, 'edited');
+            const verb =
+                action.toLowerCase() === 'created'
+                    ? 'Created'
+                    : action.toLowerCase() === 'edited'
+                      ? 'Edited'
+                      : capitalize(action);
             const pageTitle: string = first.title ?? first.page_name ?? 'a page';
             const suffix = pages.length > 1 ? ` (+${pages.length - 1} more)` : '';
-            return `${action} wiki page ${wikiLink(repo, pageTitle, links)}${suffix} in ${repoLink(repo, links)}`;
+            return `${verb} wiki page ${wikiLink(repo, pageTitle, links)}${suffix} in ${repoLink(repo, links)}`;
         }
         case 'IssueCommentEvent': {
-            const num: number = payload.issue?.number;
+            const num = payload.issue?.number;
             const isPr = !!payload.issue?.pull_request;
+            if (num === undefined || num === null) return `Commented on an issue/PR in ${repoLink(repo, links)}`;
+
             const target = isPr ? prLink(repo, num, links) : issueLink(repo, num, links);
             const kind = isPr ? 'PR' : 'issue';
             return `Commented on ${kind} ${target} in ${repoLink(repo, links)}`;
         }
         case 'IssuesEvent': {
-            const action: string = payload.action ?? 'updated';
-            const num: number = payload.issue?.number;
-            const title: string = payload.issue?.title ?? '';
+            const action = resolveAction('IssuesEvent', payload, config, 'updated');
+            const num = payload.issue?.number;
+            const title = payload.issue?.title ?? '';
+            if (num === undefined || num === null) return `${capitalize(action)} issue in ${repoLink(repo, links)}`;
+
             const link = issueLink(repo, num, links);
             const titleStr = title ? ` — _${title}_` : '';
             return `${capitalize(action)} issue ${link}${titleStr} in ${repoLink(repo, links)}`;
         }
         case 'MemberEvent': {
-            const action: string = payload.action ?? 'added';
-            const login: string = payload.member?.login ?? 'someone';
+            const action = resolveAction('MemberEvent', payload, config, 'added');
+            const login = payload.member?.login ?? 'someone';
             return `${capitalize(action)} @${login} as collaborator to ${repoLink(repo, links)}`;
         }
         case 'PublicEvent': {
             return `Made ${repoLink(repo, links)} public`;
         }
         case 'PullRequestEvent': {
-            const action: string = payload.action ?? 'updated';
+            const action = resolveAction('PullRequestEvent', payload, config, 'updated');
             const pr = payload.pull_request;
-            const num: number = pr?.number;
-            const merged: boolean = pr?.merged ?? false;
+            if (!pr) return `${capitalize(action)} PR in ${repoLink(repo, links)}`;
+
+            const num = pr.number;
+            const merged = pr.merged ?? false;
             const displayAction = action === 'closed' && merged ? 'merged' : action;
-            const title: string = pr?.title ?? '';
+            const title = pr.title ?? '';
             const titleStr = title ? ` — _${title}_` : '';
             return `${capitalize(displayAction)} PR ${prLink(repo, num, links)}${titleStr} in ${repoLink(repo, links)}`;
         }
         case 'PullRequestReviewEvent': {
-            const state: string = payload.review?.state ?? 'reviewed';
-            const num: number = payload.pull_request?.number;
+            const state = payload.review?.state ?? 'reviewed';
+            const num = payload.pull_request?.number;
+            if (num === undefined || num === null) return `Reviewed a PR in ${repoLink(repo, links)}`;
+
             const stateLabel: Record<string, string> = {
                 approved: 'Approved',
                 changes_requested: 'Requested changes on',
@@ -309,22 +366,33 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
             return `${verb} PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
         }
         case 'PullRequestReviewCommentEvent': {
-            const num: number = payload.pull_request?.number;
+            const num = payload.pull_request?.number;
+            if (num === undefined || num === null) return `Commented on a review in ${repoLink(repo, links)}`;
             return `Commented on a review of PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
         }
         case 'PullRequestReviewThreadEvent': {
-            const action: string = payload.action ?? 'resolved';
-            const num: number = payload.pull_request?.number;
+            const action = resolveAction('PullRequestReviewThreadEvent', payload, config, 'resolved');
+            const num = payload.pull_request?.number;
+            if (num === undefined || num === null)
+                return `${capitalize(action)} a review thread in ${repoLink(repo, links)}`;
             return `${capitalize(action)} a review thread on PR ${prLink(repo, num, links)} in ${repoLink(repo, links)}`;
         }
         case 'PushEvent': {
-            const count: number = payload.size ?? payload.commits?.length ?? 0;
+            // GitHub may provide either `payload.size` (total commits) or an array
+            // of commit objects (`payload.commits`). Prefer the explicit array length
+            // when available because `size` can be omitted for certain events.
+            // If neither is provided, default to 1 as a PushEvent implies at least one commit.
+            const hasExplicitCount = payload.commits != null || payload.size != null;
+            const count: number = payload.commits?.length ?? payload.size ?? (payload.ref ? 1 : 0);
             const ref: string = payload.ref ?? '';
             const branch = refLink(repo, ref, links);
             const head: string = payload.head ?? '';
             const headStr = head ? ` (${commitLink(repo, head, links)})` : '';
 
-            if (count === 0) {
+            // When there are no commits (count === 0) we still want to show the
+            // branch and, if present, the head SHA. This matches the test suite
+            // expectation for a push with only a head reference.
+            if (count === 0 || !hasExplicitCount) {
                 return `Pushed to ${branch} in ${repoLink(repo, links)}${headStr}`;
             }
 
@@ -332,15 +400,18 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
             return `Pushed ${count} ${label} to ${branch} in ${repoLink(repo, links)}${headStr}`;
         }
         case 'ReleaseEvent': {
-            const action: string = payload.action ?? 'published';
-            const tag: string = payload.release?.tag_name ?? '';
-            const name: string = payload.release?.name ?? '';
+            const action = resolveAction('ReleaseEvent', payload, config, 'published');
+            const release = payload.release;
+            if (!release) return `${capitalize(action)} release in ${repoLink(repo, links)}`;
+
+            const tag = release.tag_name ?? '';
+            const name = release.name ?? '';
             return `${capitalize(action)} release ${releaseLink(repo, tag, name, links)} in ${repoLink(repo, links)}`;
         }
         case 'SponsorshipEvent': {
-            const action: string = payload.action ?? 'started';
-            const login: string = payload.sponsorship?.sponsorable?.login ?? 'someone';
-            const verb = action === 'cancelled' ? 'Cancelled sponsorship of' : 'Started sponsoring';
+            const action = resolveAction('SponsorshipEvent', payload, config, 'started');
+            const login = payload.sponsorship?.sponsorable?.login ?? 'someone';
+            const verb = action.toLowerCase() === 'cancelled' ? 'Cancelled sponsorship of' : 'Started sponsoring';
             return `${verb} @${login}`;
         }
         case 'WatchEvent': {
@@ -355,7 +426,11 @@ function describeEvent(event: any, config: Partial<ActivityConfig>): string {
  * Normalize event into renderable object
  */
 function build(event: any, config: Partial<ActivityConfig>) {
-    const b = EVENT_BADGE[event.type] ?? { emoji: '•', label: event.type, color: '888' };
+    const b = EVENT_BADGE[event.type] ?? {
+        emoji: '•',
+        label: event.type,
+        color: '888'
+    };
 
     return {
         emoji: b.emoji,
